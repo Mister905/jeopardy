@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  games     Game[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Game {
+  id            String        @id @default(cuid())
+  user          User          @relation(fields: [userId], references: [id])
+  userId        String
+
+  state         GameState     @default(PENDING)
+  score         Int           @default(0)
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  gameClues     GameClue[]
+  finalJeopardy FinalJeopardy?
+  auditLogs     GameAudit[]
+}
+
+model Clue {
+  id          String   @id @default(cuid())
+
+  category    String
+  round       Round
+  value       Int
+  question    String
+  answer      String
+  dailyDouble Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+
+  // IMPORTANT:
+  // Clue records are immutable after creation.
+  // No updates to question, answer, category, round, value, or dailyDouble.
+  gameClues      GameClue[]      @relation("GameClueClue")
+  finalJeopardy  FinalJeopardy[] @relation("FinalJeopardyClue")
+}
+
+model GameClue {
+  id          String     @id @default(cuid())
+
+  game        Game       @relation(fields: [gameId], references: [id])
+  gameId      String
+
+  clue        Clue       @relation("GameClueClue", fields: [clueId], references: [id])
+  clueId      String
+
+  state       ClueState  @default(UNANSWERED)
+
+  // Only populated for Daily Doubles
+  wager       Int?
+
+  // Score delta resulting from this clue resolution
+  scoreDelta  Int?
+
+  answeredAt  DateTime?
+}
+
+model FinalJeopardy {
+  id          String   @id @default(cuid())
+
+  game        Game     @relation(fields: [gameId], references: [id])
+  gameId      String   @unique
+
+  clue        Clue     @relation("FinalJeopardyClue", fields: [clueId], references: [id])
+  clueId      String
+
+  wager       Int
+  correct     Boolean?
+  scoreDelta  Int?
+  answeredAt  DateTime?
+}
+
+model GameAudit {
+  id          String   @id @default(cuid())
+
+  game        Game     @relation(fields: [gameId], references: [id])
+  gameId      String
+
+  action      String
+  details     Json?
+
+  createdAt   DateTime @default(now())
+}
+
+enum GameState {
+  PENDING          // Created, board not yet played
+  ACTIVE           // Jeopardy / Double Jeopardy in progress
+  FINAL_PENDING    // Eligible for Final Jeopardy, wager not submitted
+  FINAL_ACTIVE     // Final Jeopardy in progress
+  ELIMINATED       // ≤ $0 after Double Jeopardy
+  COMPLETED        // Game finished
+}
+
+enum ClueState {
+  UNANSWERED
+  ANSWERED
+  RESOLVED
+}
+
+enum Round {
+  JEOPARDY
+  DOUBLE_JEOPARDY
+  FINAL
+}

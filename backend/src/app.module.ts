@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { GameModule } from './game/game.module';
+import { CluebaseModule } from './cluebase/cluebase.module';
 
 @Module({
   imports: [
@@ -10,6 +12,8 @@ import { PrismaModule } from './prisma/prisma.module';
       isGlobal: true,
     }),
     PrismaModule,
+    CluebaseModule,
+    GameModule,
   ],
   controllers: [AppController],
   providers: [AppService],

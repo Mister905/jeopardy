@@ -2,45 +2,56 @@
 
 The goal is to ultimately remove ambiguity before it can cost you time.
 
+## Workflow Overview
+
 - `create_brief.md` → locks intent
 - `business_rules.md` → locks behavior
 - `design_schema.md` → locks Prisma models
 - `plan_feature.md` → plans implementation
 - Cursor implementation → writes code
 
-## Command Directory Structure
+## Directory Structure
 
+```
 docs/
-  create_brief.md
-  business_rules.md
-  design_schema.md
+  commands/
+    create_brief.md
+    business_rules.md
+    design_schema.md
+    plan_feature.md
+    code_review.md
   features/
     0001_PLAN.md
+    0001_REVIEW.md
+```
 
-## Project Setup + Pre-Cursor Docs
+---
 
-### Create project folder
+## Phase 1: Project Setup + Pre-Cursor Docs
+
+### Step 1: Create Project Structure
 
 ```bash
 mkdir jeopardy
 cd jeopardy
-mkdir docs
-cd docs
-mkdir commands
-cd commands
+mkdir -p docs/commands docs/features
 ```
 
-### Create pre-implementation docs
+### Step 2: Create Pre-Implementation Documentation
 
 ```bash
+cd docs/commands
 touch create_brief.md
-# Paste template and customize using general_pre_implementation_guide.md for reference
-
 touch business_rules.md
-# Paste template and customize using game_rules_specification.md for reference
 ```
 
-### Cursor prompts for pre-cursor docs
+**Note:** Customize these files using:
+- `general_pre_implementation_guide.md` for `create_brief.md`
+- `game_rules_specification.md` for `business_rules.md`
+
+### Step 3: Validate Pre-Cursor Docs with Cursor
+
+Open a new Cursor chat and run:
 
 ```
 @create_brief.md
@@ -50,60 +61,74 @@ touch business_rules.md
 "Confirm you understand the business rules. Do not write code yet."
 ```
 
-## Backend + Prisma Environment
+---
 
-### Scaffold NestJS backend
+## Phase 2: Backend + Prisma Environment
+
+### Step 1: Scaffold NestJS Backend
 
 ```bash
+cd jeopardy
 npx @nestjs/cli new backend
 cd backend
 ```
 
-### Install dependencies
+### Step 2: Install Dependencies
 
 ```bash
 npm install @nestjs/config @prisma/client prisma
 ```
 
-### Initialize Prisma
+### Step 3: Initialize Prisma
 
 ```bash
 npx prisma init
 # Creates prisma/schema.prisma and .env
 ```
 
-### Create Supabase project
+### Step 4: Configure Database Connection
 
-Copy Session pooler connection string (IPv4-compatible)
-
-Set in `.env`:
+1. Create a Supabase project
+2. Copy the Session pooler connection string (IPv4-compatible)
+3. Set in `backend/.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:[PROJECT_ID]:[PASSWORD]@[POOLER_URL]:5432/postgres"
 ```
 
-### Configure NestJS to load .env
+### Step 5: Configure NestJS to Load Environment Variables
+
+Update `backend/src/app.module.ts`:
 
 ```typescript
-// app.module.ts
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true })],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+  ],
 })
 export class AppModule {}
 ```
 
-## Lock Prisma Schema via Cursor
+---
 
-### Create design_schema.md
+## Phase 3: Lock Prisma Schema via Cursor
+
+### Step 1: Create Schema Design Document
 
 ```bash
+cd docs/commands
 touch design_schema.md
 # Paste template for authoritative Prisma schema
 ```
 
-### Cursor prompt for schema
+### Step 2: Generate Schema with Cursor
+
+Open a new Cursor chat and run:
 
 ```
 @design_schema.md
@@ -112,33 +137,38 @@ relationships, and invariants described in create_brief.md and business_rules.md
 Do not write application code yet."
 ```
 
-### Replace prisma/schema.prisma
+### Step 3: Apply Generated Schema
 
-Use Cursor-generated schema
-
-### Run Prisma migration
+1. Replace `backend/prisma/schema.prisma` with the Cursor-generated schema
+2. Run Prisma migration:
 
 ```bash
+cd backend
 npx prisma migrate dev --name init
 # Creates tables in Supabase and generates Prisma Client
 ```
 
-### Generate Prisma client
+3. Generate Prisma client:
 
 ```bash
 npx prisma generate
 ```
 
-### Create Prisma module and service
+### Step 4: Create Prisma Module and Service
 
 ```bash
 npx nest g module prisma
 npx nest g service prisma
 ```
 
-### Implement PrismaService
+### Step 5: Implement PrismaService
+
+Update `backend/src/prisma/prisma.service.ts`:
 
 ```typescript
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
@@ -147,9 +177,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 }
 ```
 
-### Export PrismaService
+### Step 6: Export PrismaService
+
+Update `backend/src/prisma/prisma.module.ts`:
 
 ```typescript
+import { Module } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
+
 @Module({
   providers: [PrismaService],
   exports: [PrismaService],
@@ -157,16 +192,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 export class PrismaModule {}
 ```
 
-## Feature Planning + Cursor Implementation
+---
 
-### Create plan_feature.md
+## Phase 4: Feature Planning + Implementation
+
+### Step 1: Create Feature Plan
 
 ```bash
-touch plan_feature.md
-# Describe feature: e.g., Create Game endpoint
+cd docs/features
+touch 0001_PLAN.md
 ```
 
-### Cursor prompt to plan feature
+### Step 2: Generate Feature Plan with Cursor
+
+Open a new Cursor chat and run:
 
 ```
 @plan_feature.md
@@ -180,22 +219,46 @@ Rules: Follow business_rules.md for game initialization, deterministic state, an
 Dependencies: Prisma schema (design_schema.md), backend modules
 ```
 
-### Cursor generates implementation
+This will generate a detailed plan in `docs/features/0001_PLAN.md`.
 
-Run plan prompt that was generated by the previous prompt
+### Step 3: Implement Feature
+
+Open a new Cursor chat and run:
 
 ```
-"Please implement 1_PLAN.md"
+"Please implement docs/features/0001_PLAN.md"
 ```
 
-## Key Notes
+### Step 4: Code Review
 
-Manual NestJS + Prisma setup prepares environment for Cursor.
+**Important:** Open a **new chat** for unbiased context and run:
 
-Pre-cursor docs (create_brief.md + business_rules.md) lock intent and rules.
+```
+@code_review.md
+@0001_PLAN.md
+```
 
-Cursor generates schema and feature code, never product decisions.
+This reviews the implementation in a clean context to catch errors, inconsistencies, or edge cases. This helps remove confirmation bias from the review process.
 
-Replace schema.prisma before migrations.
+The review will be documented in `docs/features/0001_REVIEW.md`.
 
-Follow this order to avoid conflicts, redundant steps, or schema drift.
+### Step 5: Address Code Review Findings
+
+In the same review chat, fix issues:
+
+```
+"Please implement fixes for all the issues found in docs/features/0001_REVIEW.md"
+```
+
+This closes the loop and ensures the implementation aligns with the plan and rules.
+
+---
+
+## Key Principles
+
+1. **Manual setup first**: NestJS + Prisma setup prepares the environment for Cursor
+2. **Lock intent early**: Pre-cursor docs (`create_brief.md` + `business_rules.md`) lock intent and rules
+3. **Cursor generates, you decide**: Cursor generates schema and feature code, never product decisions
+4. **Schema before migrations**: Replace `schema.prisma` before running migrations
+5. **Follow the order**: This sequence avoids conflicts, redundant steps, or schema drift
+6. **Fresh context for reviews**: Always use a new chat for code reviews to remove confirmation bias

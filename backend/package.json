@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "parse:final-jeopardy": "ts-node src/scripts/parse-final-jeopardy.ts",
+    "verify:parsed-output": "ts-node src/scripts/verify-parsed-output.ts",
+    "parse:final-jeopardy:full": "npm run parse:final-jeopardy && npm run verify:parsed-output"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

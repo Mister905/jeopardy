@@ -45,7 +45,45 @@ All rules described in business_rules.md can be enforced via domain services alo
 
 ---
 
-## Phase 3: API Contracts & Endpoints
+## Phase 3: Raw Final Jeopardy File Parsing
+
+- Implement a local parsing service for raw clue files:
+  - Read all files from `backend/data/jeopardy_clue_dataset/raw`
+  - Filter records where `round = 3` (Final Jeopardy)
+  - Validate required fields: `category`, `answer`, `question` must be non-empty
+  - Optional: tag each clue with `season_number` derived from metadata or filename
+- Write cleaned, normalized data to `backend/data/jeopardy_clue_dataset/parsed`
+- Log parsing results and flag any malformed or duplicate rows
+
+**Exit condition:**
+- All raw files are processed
+- Only valid Final Jeopardy clues exist in `parsed/`
+- Dataset is ready for ingestion into the database in the next phase
+
+---
+
+## Phase 4: Final Jeopardy Ingestion & Normalization
+
+- Implement database ingestion service:
+  - Read cleaned clues from `backend/data/jeopardy_clue_dataset/parsed`
+  - Persist Final Jeopardy clues to the database:
+    - Store with `round = FINAL` in the Clue table
+    - Set appropriate category
+    - Ensure clues are immutable after creation
+    - Deduplicate identical clues
+- Validate the dataset:
+  - Ensure sufficient number of clues exist for game creation
+  - Allow querying by category if needed
+- Add error handling and logging
+
+**Exit condition:**
+- All parsed Final Jeopardy clues are ingested into the database
+- Each clue has valid `category`, `answer`, and `question`
+- Backend can safely serve Final Jeopardy clues to the Create Game endpoint
+
+---
+
+## Phase 5: API Contracts & Endpoints
 
 - Implement API endpoints according to the locked interface contract.
 - Include:
@@ -63,7 +101,7 @@ API endpoints fully expose backend capabilities without leaking or duplicating r
 
 ---
 
-## Phase 4: Frontend Skeleton
+## Phase 6: Frontend Skeleton
 
 - Build a minimal frontend layout.
 - Integrate API calls for:
@@ -79,7 +117,7 @@ The UI can render and interact with real backend state without enforcing rules l
 
 ---
 
-## Phase 5: Frontend State & Integration
+## Phase 7: Frontend State & Integration
 
 - Introduce frontend state management if needed.
 - Track:
@@ -95,7 +133,7 @@ The frontend behaves as a predictable client of the backend with no hidden logic
 
 ---
 
-## Phase 6: Testing & Validation
+## Phase 8: Testing & Validation
 
 - Write backend unit tests for:
   - Business rules

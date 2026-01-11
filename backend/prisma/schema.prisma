@@ -53,6 +53,9 @@ model Clue {
   // No updates to question, answer, category, round, value, or dailyDouble.
   gameClues      GameClue[]      @relation("GameClueClue")
   finalJeopardy  FinalJeopardy[] @relation("FinalJeopardyClue")
+
+  // Index for efficient duplicate detection during ingestion
+  @@index([round, category, question, answer])
 }
 
 model GameClue {

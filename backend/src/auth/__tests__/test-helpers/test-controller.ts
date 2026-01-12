@@ -3,7 +3,7 @@ import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../auth.guard';
 import { CurrentUser } from '../../decorators/current-user.decorator';
 import { Public } from '../../decorators/public.decorator';
-import { AuthenticatedUser } from '../../types';
+import type { AuthenticatedUser } from '../../types';
 
 /**
  * Test controller for authentication E2E tests

@@ -31,6 +31,8 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@supabase/supabase-js": "^2.39.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.3",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
     "prisma": "^7.2.0",

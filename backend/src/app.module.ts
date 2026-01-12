@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { IngestionModule } from './data/ingestion/ingestion.module';
+import { GameModule } from './game/game.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { IngestionModule } from './data/ingestion/ingestion.module';
     }),
     PrismaModule,
     IngestionModule,
+    GameModule,
   ],
   controllers: [AppController],
   providers: [AppService],

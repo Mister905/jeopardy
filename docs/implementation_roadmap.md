@@ -106,9 +106,15 @@ All rules described in business_rules.md can be enforced via domain services alo
   - All protected endpoints require valid Supabase JWT tokens
   - User identity is reliably extracted from tokens for authorization checks
   - User context is available to domain services via authenticated userId
+  - Implementation is fully verified via unit and end-to-end tests, including:
+    - Valid, expired, and invalid JWT tokens
+    - Missing or malformed token headers
+    - Public route bypass
+    - CurrentUser extraction
+    - Logging and error handling without exposing sensitive information
 
 **Exit condition:**
-Supabase Auth is fully integrated and functional. All protected API endpoints can securely identify users via JWT verification, and userId from Supabase JWT tokens is used to associate all game objects and domain entities with authenticated users. Authorization checks are in place to enforce ownership and access control.
+Supabase Auth is fully integrated, tested, and functional. All protected API endpoints securely identify users via JWT verification, userId is correctly propagated to domain services, and authorization checks enforce ownership and access control. Unit and E2E tests pass for all token and authentication scenarios.
 
 ---
 

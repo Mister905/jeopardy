@@ -83,7 +83,36 @@ All rules described in business_rules.md can be enforced via domain services alo
 
 ---
 
-## Phase 5: API Contracts & Endpoints
+## Phase 5: Authentication
+
+- Implement authentication and authorization infrastructure using Supabase Auth.
+- Initialize Supabase Auth in the backend:
+  - Configure Supabase client with project credentials
+  - Set up Supabase Auth service integration
+  - Configure JWT secret and verification settings
+- Add JWT verification for all API endpoints that require authentication:
+  - Implement authentication guards using Supabase JWT verification
+  - Create middleware to validate Supabase JWT tokens
+  - Extract user identity from verified JWT tokens
+- Ensure that userId from the JWT is used to associate game objects and other domain entities:
+  - Extract userId from Supabase JWT token claims
+  - Pass userId to domain services for entity creation and queries
+  - Associate all game objects, scores, and actions with authenticated userId
+- Include authorization checks based on roles or ownership if necessary:
+  - Verify users can only access their own games
+  - Enforce ownership-based access control for game operations
+  - Add role-based checks if multi-user or admin features are needed
+- Ensure:
+  - All protected endpoints require valid Supabase JWT tokens
+  - User identity is reliably extracted from tokens for authorization checks
+  - User context is available to domain services via authenticated userId
+
+**Exit condition:**
+Supabase Auth is fully integrated and functional. All protected API endpoints can securely identify users via JWT verification, and userId from Supabase JWT tokens is used to associate all game objects and domain entities with authenticated users. Authorization checks are in place to enforce ownership and access control.
+
+---
+
+## Phase 6: API Contracts & Endpoints
 
 - Implement API endpoints according to the locked interface contract.
 - Include:
@@ -94,14 +123,14 @@ All rules described in business_rules.md can be enforced via domain services alo
 - Ensure endpoints remain thin:
   - No duplicated business logic
   - All rules delegated to domain services
-- Add authentication and authorization middleware if required.
+- Integrate authentication guards from Phase 5.
 
 **Exit condition:**
 API endpoints fully expose backend capabilities without leaking or duplicating rules.
 
 ---
 
-## Phase 6: Frontend Skeleton
+## Phase 7: Frontend Skeleton
 
 - Build a minimal frontend layout.
 - Integrate API calls for:
@@ -117,7 +146,7 @@ The UI can render and interact with real backend state without enforcing rules l
 
 ---
 
-## Phase 7: Frontend State & Integration
+## Phase 8: Frontend State & Integration
 
 - Introduce frontend state management if needed.
 - Track:
@@ -133,7 +162,7 @@ The frontend behaves as a predictable client of the backend with no hidden logic
 
 ---
 
-## Phase 8: Testing & Validation
+## Phase 9: Testing & Validation
 
 - Write backend unit tests for:
   - Business rules

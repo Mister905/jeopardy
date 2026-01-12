@@ -3,8 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
-import { IngestionModule } from './data/ingestion/ingestion.module';
-import { GameModule } from './game/game.module';
 
 @Module({
   imports: [
@@ -12,8 +10,6 @@ import { GameModule } from './game/game.module';
       isGlobal: true,
     }),
     PrismaModule,
-    IngestionModule,
-    GameModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CluebaseService } from '../data/cluebase/cluebase.service';
 import {
   GameState,
   Round,
@@ -18,7 +17,6 @@ export class GameService {
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly cluebaseService: CluebaseService,
   ) {}
 
   /**
@@ -318,38 +316,21 @@ export class GameService {
 
     const prisma = this.prismaService.client;
 
-    // Step 1: Fetch and persist clues from Cluebase API for Jeopardy round
-    // Need at least 6 categories × 5 clues = 30 clues, but fetch more to ensure we have enough
-    const jeopardyCluesRequired = 6 * 5; // Minimum for one complete board
-    this.logger.log(`Fetching clues from Cluebase API for Jeopardy round`);
-    await this.cluebaseService.fetchAndPersistClues(
-      Round.JEOPARDY,
-      jeopardyCluesRequired * 2, // Fetch extra to have variety
-    );
-
-    // Step 2: Fetch and persist clues from Cluebase API for Double Jeopardy round
-    const doubleJeopardyCluesRequired = 6 * 5; // Minimum for one complete board
-    this.logger.log(`Fetching clues from Cluebase API for Double Jeopardy round`);
-    await this.cluebaseService.fetchAndPersistClues(
-      Round.DOUBLE_JEOPARDY,
-      doubleJeopardyCluesRequired * 2, // Fetch extra to have variety
-    );
-
-    // Step 3: Select 6 unique categories for Jeopardy round (from persisted clues)
+    // Step 1: Select 6 unique categories for Jeopardy round (from database)
     const jeopardyCategories = await this.selectCategoriesForRound(Round.JEOPARDY, 6);
     this.logger.debug(`Selected ${jeopardyCategories.length} categories for Jeopardy`);
 
-    // Step 4: Select 6 unique categories for Double Jeopardy round (from persisted clues)
+    // Step 2: Select 6 unique categories for Double Jeopardy round (from database)
     const doubleJeopardyCategories = await this.selectCategoriesForRound(Round.DOUBLE_JEOPARDY, 6);
     this.logger.debug(`Selected ${doubleJeopardyCategories.length} categories for Double Jeopardy`);
 
-    // Step 5: Get all clues for selected categories with Daily Doubles
+    // Step 3: Get all clues for selected categories with Daily Doubles
     // Jeopardy: exactly 1 Daily Double
     // Double Jeopardy: exactly 2 Daily Doubles
     const jeopardyClues = await this.getCluesForCategories(jeopardyCategories, Round.JEOPARDY, 1);
     const doubleJeopardyClues = await this.getCluesForCategories(doubleJeopardyCategories, Round.DOUBLE_JEOPARDY, 2);
 
-    // Step 6: Create GameClue records and update game state in transaction
+    // Step 4: Create GameClue records and update game state in transaction
     const updatedGame = await prisma.$transaction(async (tx) => {
       // Create GameClue records for Jeopardy round
       const jeopardyGameClues = jeopardyClues.map((clue) => ({
@@ -390,6 +371,7 @@ export class GameService {
 
   /**
    * Select unique categories for a round
+   * Only selects categories that have clues for all required values
    * @param round - Round to select categories for
    * @param count - Number of categories to select
    * @returns Array of unique category names
@@ -397,6 +379,7 @@ export class GameService {
    */
   private async selectCategoriesForRound(round: Round, count: number): Promise<string[]> {
     const prisma = this.prismaService.client;
+    const requiredValues = round === Round.JEOPARDY ? [200, 400, 600, 800, 1000] : [400, 800, 1200, 1600, 2000];
 
     // First check if any clues exist for this round
     const totalClues = await prisma.clue.count({
@@ -406,37 +389,57 @@ export class GameService {
     if (totalClues === 0) {
       throw new Error(
         `No clues found in database for ${round} round. ` +
-        `Cluebase API may be unavailable or returned no valid clues. ` +
-        `Please check your CLUEBASE_API_URL configuration and ensure the API is accessible.`,
+        `Please run the Jeopardy ingestion script: npm run ingest:jeopardy`,
       );
     }
 
     // Get distinct categories for the round
-    const categories = await prisma.clue.findMany({
+    const allCategories = await prisma.clue.findMany({
       where: { round },
       select: { category: true },
       distinct: ['category'],
     });
 
-    if (categories.length < count) {
-      // Check how many clues we have per category to provide better error
-      const cluesPerCategory = await prisma.clue.groupBy({
-        by: ['category'],
-        where: { round },
-        _count: { id: true },
-      });
+    // Filter categories to only those that have clues for all required values
+    // Use a single query to count clues per category:value combination
+    const categoryValueCounts = await prisma.clue.groupBy({
+      by: ['category', 'value'],
+      where: {
+        round,
+        value: { in: requiredValues },
+      },
+      _count: { id: true },
+    });
 
+    // Group by category and check if each has all required values
+    const categoryValueMap = new Map<string, Set<number>>();
+    for (const item of categoryValueCounts) {
+      if (!categoryValueMap.has(item.category)) {
+        categoryValueMap.set(item.category, new Set());
+      }
+      categoryValueMap.get(item.category)!.add(item.value);
+    }
+
+    // Only include categories that have all required values
+    const validCategories = Array.from(categoryValueMap.entries())
+      .filter(([_, values]) => {
+        return requiredValues.every((value) => values.has(value));
+      })
+      .map(([category]) => category);
+
+    if (validCategories.length < count) {
       throw new Error(
-        `Not enough categories available for ${round} round. Found ${categories.length} categories, need ${count}. ` +
+        `Not enough complete categories available for ${round} round. ` +
+        `Found ${validCategories.length} categories with all required values, need ${count}. ` +
+        `Total categories in database: ${allCategories.length}. ` +
         `Total clues in database: ${totalClues}. ` +
-        `The Cluebase API may not have returned enough clues with distinct categories. ` +
-        `Please try starting the game again, or check if the API is returning sufficient clue data.`,
+        `Please run the Jeopardy ingestion script: npm run ingest:jeopardy`,
       );
     }
 
     // Randomly select categories
-    const shuffled = categories.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count).map((c) => c.category);
+    const shuffled = validCategories.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
   }
 
   /**

@@ -5,6 +5,8 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { GameModule } from './game/game.module';
 import { AuthModule } from './auth/auth.module';
+import { ParsingModule } from './data/parsing/parsing.module';
+import { IngestionModule } from './data/ingestion/ingestion.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { AuthModule } from './auth/auth.module';
     PrismaModule,
     AuthModule,
     GameModule,
+    ParsingModule,
+    IngestionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

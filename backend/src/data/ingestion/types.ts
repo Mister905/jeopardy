@@ -1,8 +1,14 @@
-import { ParsedFinalJeopardyClue } from '../parsing/types';
+import {
+  ParsedFinalJeopardyClue,
+  ParsedJeopardyClue,
+} from '../parsing/types';
+
+// Union type for all parsed clue types
+export type ParsedClue = ParsedFinalJeopardyClue | ParsedJeopardyClue;
 
 export interface IngestionError {
   clueIndex?: number;
-  clue?: ParsedFinalJeopardyClue;
+  clue?: ParsedClue;
   message: string;
   type: 'validation' | 'database' | 'file';
 }

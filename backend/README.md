@@ -37,12 +37,6 @@ DATABASE_URL="postgresql://user:password@localhost:5432/jeopardy"
 SUPABASE_URL="https://your-project.supabase.co"
 SUPABASE_ANON_KEY="your-anon-key"
 SUPABASE_JWT_SECRET="your-jwt-secret"
-
-# Cluebase API (optional)
-# URL for Cluebase API (defaults to https://cluebase.com/api if not set)
-CLUEBASE_API_URL="https://cluebase.com/api"
-# API key if Cluebase API requires authentication (optional)
-CLUEBASE_API_KEY="your-api-key-if-required"
 ```
 
 ## Project setup
@@ -63,6 +57,25 @@ $ npm run start:dev
 # production mode
 $ npm run start:prod
 ```
+
+## Data Ingestion
+
+Before starting games, you need to ingest clue data into the database:
+
+```bash
+# Ingest Final Jeopardy clues
+$ npm run ingest:final-jeopardy
+
+# Ingest Jeopardy and Double Jeopardy clues
+$ npm run ingest:jeopardy
+```
+
+The ingestion scripts will:
+1. Parse raw TSV files from `backend/data/jeopardy_clue_dataset/raw/`
+2. Extract and validate clues for the respective rounds
+3. Persist clues to the database, skipping duplicates
+
+**Note:** Jeopardy and Double Jeopardy clues must be ingested before games can be started. If you encounter errors about insufficient clues, run `npm run ingest:jeopardy` first.
 
 ## Run tests
 

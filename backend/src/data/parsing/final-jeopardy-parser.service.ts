@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import {
@@ -17,7 +17,10 @@ export class FinalJeopardyParserService {
   private readonly minSeason = 33;
   private readonly maxSeason = 41;
 
-  constructor(rawDataDir?: string, parsedDataDir?: string) {
+  constructor(
+    @Optional() rawDataDir?: string,
+    @Optional() parsedDataDir?: string,
+  ) {
     // Resolve paths relative to project root, or use provided paths for testing
     if (rawDataDir && parsedDataDir) {
       this.rawDataDir = rawDataDir;

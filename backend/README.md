@@ -25,6 +25,26 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Environment Variables
+
+Create a `.env` file in the backend root directory with the following variables:
+
+```bash
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/jeopardy"
+
+# Supabase Authentication
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_JWT_SECRET="your-jwt-secret"
+
+# Cluebase API (optional)
+# URL for Cluebase API (defaults to https://cluebase.com/api if not set)
+CLUEBASE_API_URL="https://cluebase.com/api"
+# API key if Cluebase API requires authentication (optional)
+CLUEBASE_API_KEY="your-api-key-if-required"
+```
+
 ## Project setup
 
 ```bash

@@ -1,17 +1,30 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/hooks';
-import { supabase } from '@/lib/auth/supabase';
+import { useAppDispatch } from '@/store/hooks';
+import { signOutUser } from '@/store/authSlice';
 import { Button } from '../ui/Button';
 
 export function Header() {
   const { user, loading } = useAuth();
+  const dispatch = useAppDispatch();
+  const [signingOut, setSigningOut] = useState(false);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/auth/login';
+    setSigningOut(true);
+    try {
+      await dispatch(signOutUser());
+      // Redirect even if there's an error (user should still be logged out locally)
+      window.location.href = '/auth/login';
+    } catch (err) {
+      console.error('Sign out error:', err);
+      // Still redirect to login page
+      window.location.href = '/auth/login';
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -32,8 +45,8 @@ export function Header() {
                 My Games
               </Link>
               <span className="text-gray-400">{user.email}</span>
-              <Button variant="secondary" onClick={handleLogout}>
-                Logout
+              <Button variant="secondary" onClick={handleLogout} disabled={signingOut}>
+                {signingOut ? 'Logging out...' : 'Logout'}
               </Button>
             </>
           ) : (

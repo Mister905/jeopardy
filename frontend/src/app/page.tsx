@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth/hooks';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -11,16 +11,18 @@ export const dynamic = 'force-dynamic';
 export default function HomePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && pathname === '/') {
+      // Only redirect from home page to prevent loops
       if (user) {
         router.push('/games');
       } else {
         router.push('/auth/login');
       }
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, pathname]);
 
   return (
     <div className="flex justify-center items-center min-h-[60vh]">

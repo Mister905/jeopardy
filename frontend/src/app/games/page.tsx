@@ -35,12 +35,20 @@ export default function GamesPage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
-          router.push('/auth/login');
+          // Only redirect if not already on login page to prevent loops
+          // useRequireAuth will handle the redirect, so we don't need to do it here
+          // Just clear the user state and let the hook handle it
           return;
         }
+        // Show the specific error message from the API client
         setError(err.message);
       } else {
-        setError('Failed to load games. Please try again.');
+        // Handle unexpected errors
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : 'Failed to load games. Please try again.';
+        setError(errorMessage);
       }
     } finally {
       setLoading(false);
@@ -56,7 +64,7 @@ export default function GamesPage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
-          router.push('/auth/login');
+          // useRequireAuth will handle the redirect
           return;
         }
         setError(err.message);

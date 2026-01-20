@@ -24,7 +24,7 @@ function CallbackContent() {
         }
 
         if (data.session) {
-          // Successfully authenticated, redirect to games
+          // Successfully authenticated (email verification or other auth flow), redirect to games
           router.push('/games');
         } else {
           // No session, redirect to login

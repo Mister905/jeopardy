@@ -115,7 +115,7 @@ export class GameController {
     this.logger.log(`Creating game for user: ${user.userId}`);
 
     try {
-      const result = await this.gameService.createGame(user.userId);
+      const result = await this.gameService.createGame(user.userId, user.email);
       // CreateGameResult.game has finalJeopardy with clue, but no gameClues
       // Map it to match GameWithRelations structure
       const gameData = {
@@ -229,12 +229,10 @@ export class GameController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('round') round?: Round,
   ): Promise<BoardResponseDto> {
-
     const board = await this.gameService.getBoard(gameId, user.userId, round);
-
-    // TODO: Map board to BoardResponseDto
-    // This will be implemented when getBoard is fully implemented
-    throw new Error('Board retrieval not yet implemented');
+    
+    // The service already returns the correct format, just cast it
+    return board as BoardResponseDto;
   }
 
   /**

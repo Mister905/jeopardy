@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CluebaseService } from '../data/cluebase/cluebase.service';
 import {
   GameState,
   Round,
@@ -15,27 +16,34 @@ import { CreateGameResult } from './types';
 export class GameService {
   private readonly logger = new Logger(GameService.name);
 
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly cluebaseService: CluebaseService,
+  ) {}
 
   /**
    * Create a new game with a Final Jeopardy clue
-   * @param userId - The authenticated user creating the game
+   * @param userId - The authenticated user creating the game (Supabase user ID)
+   * @param userEmail - Optional user email for user creation
    * @returns Created game with associated Final Jeopardy clue
    * @throws Error if userId is invalid, no clues available, or database operation fails
    */
-  async createGame(userId: string): Promise<CreateGameResult> {
+  async createGame(userId: string, userEmail?: string): Promise<CreateGameResult> {
     this.logger.log(`Creating game for user: ${userId}`);
 
     // Step 1: Validate User
     this.validateUserId(userId);
 
-    // Step 2: Select Final Jeopardy Clue
+    // Step 2: Ensure user exists in database (create if not exists)
+    await this.ensureUserExists(userId, userEmail);
+
+    // Step 3: Select Final Jeopardy Clue
     const selectedClue = await this.selectFinalJeopardyClue();
 
-    // Step 3 & 4: Create Game and FinalJeopardy Association in transaction
+    // Step 4 & 5: Create Game and FinalJeopardy Association in transaction
     const result = await this.prismaService.client.$transaction(
       async (prisma) => {
-        // Step 3: Create Game Record
+        // Step 4: Create Game Record
         const game = await prisma.game.create({
           data: {
             userId,
@@ -46,7 +54,7 @@ export class GameService {
 
         this.logger.log(`Created game: ${game.id}`);
 
-        // Step 4: Create FinalJeopardy Association
+        // Step 5: Create FinalJeopardy Association
         const finalJeopardy = await prisma.finalJeopardy.create({
           data: {
             gameId: game.id,
@@ -59,7 +67,7 @@ export class GameService {
           `Created FinalJeopardy association: ${finalJeopardy.id} for clue: ${selectedClue.id}`,
         );
 
-        // Step 5: Fetch complete game with relations
+        // Step 6: Fetch complete game with relations
         const gameWithRelations = await prisma.game.findUnique({
           where: { id: game.id },
           include: {
@@ -121,6 +129,51 @@ export class GameService {
       const error: Error = new Error('User ID is required');
       error.name = 'ValidationError';
       throw error;
+    }
+  }
+
+  /**
+   * Ensure user exists in database, create if not exists
+   * @param userId - Supabase user ID
+   * @param userEmail - Optional user email
+   * @throws Error if user creation fails
+   */
+  private async ensureUserExists(userId: string, userEmail?: string): Promise<void> {
+    const prisma = this.prismaService.client;
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (existingUser) {
+      this.logger.debug(`User already exists: ${userId}`);
+      return;
+    }
+
+    // Create user if not exists
+    if (!userEmail) {
+      // If no email provided, use a placeholder (user can update later)
+      this.logger.warn(`Creating user without email: ${userId}`);
+    }
+
+    try {
+      await prisma.user.create({
+        data: {
+          id: userId, // Use Supabase user ID as the primary key
+          email: userEmail || `user-${userId}@placeholder.local`,
+        },
+      });
+      this.logger.log(`Created user record: ${userId}`);
+    } catch (error) {
+      // If user was created by another request between check and create, that's okay
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Unique constraint') || errorMessage.includes('P2002')) {
+        this.logger.debug(`User was created by another request: ${userId}`);
+        return;
+      }
+      this.logger.error(`Failed to create user: ${errorMessage}`);
+      throw new Error(`Failed to ensure user exists: ${errorMessage}`);
     }
   }
 
@@ -263,16 +316,231 @@ export class GameService {
       throw new Error(`Game cannot be started. Current state: ${game.state}`);
     }
 
-    // TODO: Implement board creation logic
-    // This requires:
-    // 1. Select 6 categories × 5 clues for Jeopardy round
-    // 2. Select 6 categories × 5 clues for Double Jeopardy round
-    // 3. Ensure Jeopardy has exactly 1 Daily Double
-    // 4. Ensure Double Jeopardy has exactly 2 Daily Doubles
-    // 5. Create GameClue records for all clues
-    // 6. Transition game state to ACTIVE
+    const prisma = this.prismaService.client;
 
-    throw new Error('Game board creation not yet implemented');
+    // Step 1: Fetch and persist clues from Cluebase API for Jeopardy round
+    // Need at least 6 categories × 5 clues = 30 clues, but fetch more to ensure we have enough
+    const jeopardyCluesRequired = 6 * 5; // Minimum for one complete board
+    this.logger.log(`Fetching clues from Cluebase API for Jeopardy round`);
+    await this.cluebaseService.fetchAndPersistClues(
+      Round.JEOPARDY,
+      jeopardyCluesRequired * 2, // Fetch extra to have variety
+    );
+
+    // Step 2: Fetch and persist clues from Cluebase API for Double Jeopardy round
+    const doubleJeopardyCluesRequired = 6 * 5; // Minimum for one complete board
+    this.logger.log(`Fetching clues from Cluebase API for Double Jeopardy round`);
+    await this.cluebaseService.fetchAndPersistClues(
+      Round.DOUBLE_JEOPARDY,
+      doubleJeopardyCluesRequired * 2, // Fetch extra to have variety
+    );
+
+    // Step 3: Select 6 unique categories for Jeopardy round (from persisted clues)
+    const jeopardyCategories = await this.selectCategoriesForRound(Round.JEOPARDY, 6);
+    this.logger.debug(`Selected ${jeopardyCategories.length} categories for Jeopardy`);
+
+    // Step 4: Select 6 unique categories for Double Jeopardy round (from persisted clues)
+    const doubleJeopardyCategories = await this.selectCategoriesForRound(Round.DOUBLE_JEOPARDY, 6);
+    this.logger.debug(`Selected ${doubleJeopardyCategories.length} categories for Double Jeopardy`);
+
+    // Step 5: Get all clues for selected categories with Daily Doubles
+    // Jeopardy: exactly 1 Daily Double
+    // Double Jeopardy: exactly 2 Daily Doubles
+    const jeopardyClues = await this.getCluesForCategories(jeopardyCategories, Round.JEOPARDY, 1);
+    const doubleJeopardyClues = await this.getCluesForCategories(doubleJeopardyCategories, Round.DOUBLE_JEOPARDY, 2);
+
+    // Step 6: Create GameClue records and update game state in transaction
+    const updatedGame = await prisma.$transaction(async (tx) => {
+      // Create GameClue records for Jeopardy round
+      const jeopardyGameClues = jeopardyClues.map((clue) => ({
+        gameId,
+        clueId: clue.id,
+        state: ClueState.UNANSWERED,
+        wager: clue.dailyDouble ? null : undefined, // Daily Doubles will have wager set later
+      }));
+
+      // Create GameClue records for Double Jeopardy round
+      const doubleJeopardyGameClues = doubleJeopardyClues.map((clue) => ({
+        gameId,
+        clueId: clue.id,
+        state: ClueState.UNANSWERED,
+        wager: clue.dailyDouble ? null : undefined,
+      }));
+
+      // Create all GameClue records
+      await tx.gameClue.createMany({
+        data: [...jeopardyGameClues, ...doubleJeopardyGameClues],
+      });
+
+      // Update game state to ACTIVE
+      const updated = await tx.game.update({
+        where: { id: gameId },
+        data: { state: GameState.ACTIVE },
+      });
+
+      this.logger.log(
+        `Created ${jeopardyGameClues.length + doubleJeopardyGameClues.length} GameClue records for game ${gameId}`,
+      );
+
+      return updated;
+    });
+
+    return updatedGame;
+  }
+
+  /**
+   * Select unique categories for a round
+   * @param round - Round to select categories for
+   * @param count - Number of categories to select
+   * @returns Array of unique category names
+   * @throws Error with helpful message if not enough categories/clues available
+   */
+  private async selectCategoriesForRound(round: Round, count: number): Promise<string[]> {
+    const prisma = this.prismaService.client;
+
+    // First check if any clues exist for this round
+    const totalClues = await prisma.clue.count({
+      where: { round },
+    });
+
+    if (totalClues === 0) {
+      throw new Error(
+        `No clues found in database for ${round} round. ` +
+        `Cluebase API may be unavailable or returned no valid clues. ` +
+        `Please check your CLUEBASE_API_URL configuration and ensure the API is accessible.`,
+      );
+    }
+
+    // Get distinct categories for the round
+    const categories = await prisma.clue.findMany({
+      where: { round },
+      select: { category: true },
+      distinct: ['category'],
+    });
+
+    if (categories.length < count) {
+      // Check how many clues we have per category to provide better error
+      const cluesPerCategory = await prisma.clue.groupBy({
+        by: ['category'],
+        where: { round },
+        _count: { id: true },
+      });
+
+      throw new Error(
+        `Not enough categories available for ${round} round. Found ${categories.length} categories, need ${count}. ` +
+        `Total clues in database: ${totalClues}. ` +
+        `The Cluebase API may not have returned enough clues with distinct categories. ` +
+        `Please try starting the game again, or check if the API is returning sufficient clue data.`,
+      );
+    }
+
+    // Randomly select categories
+    const shuffled = categories.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count).map((c) => c.category);
+  }
+
+  /**
+   * Get clues for selected categories, ensuring we have all 5 values
+   * Also ensures we have the required number of Daily Doubles
+   * @param categories - Category names
+   * @param round - Round (JEOPARDY or DOUBLE_JEOPARDY)
+   * @param requiredDailyDoubles - Number of Daily Doubles required
+   * @returns Array of clues with Daily Doubles properly selected
+   */
+  private async getCluesForCategories(
+    categories: string[],
+    round: Round,
+    requiredDailyDoubles: number,
+  ): Promise<Clue[]> {
+    const prisma = this.prismaService.client;
+    const values = round === Round.JEOPARDY ? [200, 400, 600, 800, 1000] : [400, 800, 1200, 1600, 2000];
+
+    const allClues: Clue[] = [];
+    const clueMap = new Map<string, Clue[]>(); // category:value -> clues
+
+    // Collect all potential clues for each category:value combination
+    for (const category of categories) {
+      for (const value of values) {
+        const clues = await prisma.clue.findMany({
+          where: {
+            round,
+            category,
+            value,
+          },
+        });
+
+        if (clues.length === 0) {
+          throw new Error(`No clue found for category "${category}", value ${value}, round ${round}`);
+        }
+
+        clueMap.set(`${category}:${value}`, clues);
+      }
+    }
+
+    // First pass: select clues, preferring non-Daily Doubles
+    const selectedDailyDoubles: Clue[] = [];
+    
+    for (const category of categories) {
+      for (const value of values) {
+        const clues = clueMap.get(`${category}:${value}`)!;
+        const nonDailyDouble = clues.find((c) => !c.dailyDouble);
+        
+        if (nonDailyDouble) {
+          allClues.push(nonDailyDouble);
+        } else {
+          // Only Daily Doubles available, use one
+          const dailyDouble = clues.find((c) => c.dailyDouble)!;
+          allClues.push(dailyDouble);
+          selectedDailyDoubles.push(dailyDouble);
+        }
+      }
+    }
+
+    // Count Daily Doubles we have
+    const currentDailyDoubleCount = allClues.filter((c) => c.dailyDouble).length;
+
+    if (currentDailyDoubleCount === requiredDailyDoubles) {
+      // Perfect!
+      return allClues;
+    } else if (currentDailyDoubleCount < requiredDailyDoubles) {
+      // Need more Daily Doubles - replace some regular clues with Daily Doubles
+      const needed = requiredDailyDoubles - currentDailyDoubleCount;
+      const regularClues = allClues.filter((c) => !c.dailyDouble);
+      const shuffled = regularClues.sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < needed && i < shuffled.length; i++) {
+        const clueToReplace = shuffled[i];
+        const key = `${clueToReplace.category}:${clueToReplace.value}`;
+        const alternatives = clueMap.get(key)!;
+        const dailyDoubleAlternative = alternatives.find((c) => c.dailyDouble && c.id !== clueToReplace.id);
+
+        if (dailyDoubleAlternative) {
+          // Replace with a Daily Double version
+          const index = allClues.indexOf(clueToReplace);
+          allClues[index] = dailyDoubleAlternative;
+        }
+      }
+    } else {
+      // Too many Daily Doubles - replace some with regular clues
+      const excess = currentDailyDoubleCount - requiredDailyDoubles;
+      const dailyDoubleClues = allClues.filter((c) => c.dailyDouble);
+      const shuffled = dailyDoubleClues.sort(() => Math.random() - 0.5);
+
+      for (let i = 0; i < excess && i < shuffled.length; i++) {
+        const clueToReplace = shuffled[i];
+        const key = `${clueToReplace.category}:${clueToReplace.value}`;
+        const alternatives = clueMap.get(key)!;
+        const regularAlternative = alternatives.find((c) => !c.dailyDouble && c.id !== clueToReplace.id);
+
+        if (regularAlternative) {
+          // Replace with a regular version
+          const index = allClues.indexOf(clueToReplace);
+          allClues[index] = regularAlternative;
+        }
+      }
+    }
+
+    return allClues;
   }
 
   /**
@@ -280,22 +548,178 @@ export class GameService {
    * @param gameId - Game ID
    * @param userId - User ID for authorization
    * @param round - Optional specific round to retrieve
-   * @returns Board state or null
+   * @returns Board state
    */
   async getBoard(
     gameId: string,
     userId: string,
     round?: Round,
-  ): Promise<any> {
+  ): Promise<{
+    gameId: string;
+    currentRound: Round | null;
+    gameState: GameState;
+    score: number;
+    board: {
+      round: 'JEOPARDY' | 'DOUBLE_JEOPARDY' | 'FINAL';
+      categories?: Array<{
+        name: string;
+        clues: Array<{
+          gameClueId: string;
+          clueId: string;
+          value: number;
+          state: 'UNANSWERED' | 'ANSWERED' | 'RESOLVED';
+          dailyDouble: boolean;
+          question?: string;
+          answer?: string;
+          wager?: number;
+          scoreDelta?: number;
+        }>;
+      }>;
+      clue?: {
+        clueId: string;
+        category: string;
+        value: number;
+        question: string;
+        answer?: string;
+        wager: number;
+        correct: boolean | null;
+        scoreDelta: number | null;
+        answeredAt: string | null;
+      };
+    } | null;
+  }> {
     const game = await this.getGameById(gameId, userId);
     if (!game) {
       throw new Error('Game not found or access denied');
     }
 
-    // TODO: Implement board retrieval logic
-    // This requires building the board structure based on game state and round
+    const prisma = this.prismaService.client;
 
-    throw new Error('Board retrieval not yet implemented');
+    // Determine which round to show
+    let targetRound: Round | null = round || null;
+
+    if (!targetRound) {
+      // Determine current round based on game state
+      if (game.state === GameState.PENDING || game.state === GameState.ACTIVE) {
+        // Check if we have any answered clues to determine which round we're in
+        const gameClues = await prisma.gameClue.findMany({
+          where: { gameId },
+          include: { clue: true },
+        });
+
+        const jeopardyClues = gameClues.filter((gc) => gc.clue.round === Round.JEOPARDY);
+        const doubleJeopardyClues = gameClues.filter((gc) => gc.clue.round === Round.DOUBLE_JEOPARDY);
+
+        // If all Jeopardy clues are resolved, we're in Double Jeopardy
+        const allJeopardyResolved = jeopardyClues.length > 0 && jeopardyClues.every((gc) => gc.state === ClueState.RESOLVED);
+        targetRound = allJeopardyResolved ? Round.DOUBLE_JEOPARDY : Round.JEOPARDY;
+      } else if (game.state === GameState.FINAL_PENDING || game.state === GameState.FINAL_ACTIVE) {
+        targetRound = Round.FINAL;
+      }
+    }
+
+    // Build board based on round
+    if (targetRound === Round.FINAL) {
+      // Return Final Jeopardy board
+      const finalJeopardy = await prisma.finalJeopardy.findUnique({
+        where: { gameId },
+        include: { clue: true },
+      });
+
+      if (!finalJeopardy) {
+        throw new Error('Final Jeopardy not found for this game');
+      }
+
+      return {
+        gameId,
+        currentRound: Round.FINAL,
+        gameState: game.state,
+        score: game.score,
+        board: {
+          round: 'FINAL',
+          clue: {
+            clueId: finalJeopardy.clue.id,
+            category: finalJeopardy.clue.category,
+            value: finalJeopardy.clue.value,
+            question: finalJeopardy.clue.question,
+            answer: finalJeopardy.answeredAt ? finalJeopardy.clue.answer : undefined,
+            wager: finalJeopardy.wager,
+            correct: finalJeopardy.correct,
+            scoreDelta: finalJeopardy.scoreDelta,
+            answeredAt: finalJeopardy.answeredAt?.toISOString() || null,
+          },
+        },
+      };
+    } else if (targetRound === Round.JEOPARDY || targetRound === Round.DOUBLE_JEOPARDY) {
+      // Get all GameClues for the specified round
+      const gameClues = await prisma.gameClue.findMany({
+        where: {
+          gameId,
+          clue: {
+            round: targetRound,
+          },
+        },
+        include: {
+          clue: true,
+        },
+        orderBy: [
+          { clue: { category: 'asc' } },
+          { clue: { value: 'asc' } },
+        ],
+      });
+
+      // Group clues by category
+      const categoryMap = new Map<string, typeof gameClues>();
+
+      for (const gameClue of gameClues) {
+        const category = gameClue.clue.category;
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, []);
+        }
+        categoryMap.get(category)!.push(gameClue);
+      }
+
+      // Build categories array
+      const categories = Array.from(categoryMap.entries()).map(([name, clues]) => ({
+        name,
+        clues: clues.map((gc) => {
+          const clue = gc.clue;
+          const isAnswered = gc.state === ClueState.ANSWERED || gc.state === ClueState.RESOLVED;
+
+          return {
+            gameClueId: gc.id,
+            clueId: clue.id,
+            value: clue.value,
+            state: gc.state as 'UNANSWERED' | 'ANSWERED' | 'RESOLVED',
+            dailyDouble: clue.dailyDouble,
+            question: isAnswered ? clue.question : undefined,
+            answer: gc.state === ClueState.RESOLVED ? clue.answer : undefined,
+            wager: gc.wager || undefined,
+            scoreDelta: gc.scoreDelta || undefined,
+          };
+        }),
+      }));
+
+      return {
+        gameId,
+        currentRound: targetRound,
+        gameState: game.state,
+        score: game.score,
+        board: {
+          round: targetRound as 'JEOPARDY' | 'DOUBLE_JEOPARDY',
+          categories,
+        },
+      };
+    }
+
+    // No board available (game not started)
+    return {
+      gameId,
+      currentRound: null,
+      gameState: game.state,
+      score: game.score,
+      board: null,
+    };
   }
 
   /**

@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from './supabase';
 import type { AuthenticatedUser } from '@/types/auth';
+import type { Session } from '@supabase/supabase-js';
 
 export function useAuth() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
     // Get initial session
@@ -48,12 +49,16 @@ export function useAuth() {
 export function useRequireAuth() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/auth/login');
+      // Only redirect if not already on login page to prevent loops
+      if (pathname !== '/auth/login') {
+        router.push('/auth/login');
+      }
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, pathname]);
 
   return { user, loading };
 }

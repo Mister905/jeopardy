@@ -52,11 +52,57 @@ export class SupabaseService {
    */
   async verifyToken(token: string): Promise<AuthenticatedUser> {
     try {
-      // Verify JWT token using the JWT secret
-      // Supabase uses HS256 (symmetric) signing by default
-      const decoded = jwt.verify(token, this.jwtSecret, {
-        algorithms: ['HS256'],
-      }) as SupabaseJwtPayload;
+      // First, decode the token header to determine the algorithm
+      const decodedHeader = jwt.decode(token, { complete: true });
+      
+      if (!decodedHeader || typeof decodedHeader === 'string') {
+        throw new Error('Invalid token format');
+      }
+
+      const algorithm = decodedHeader.header.alg as string;
+      this.logger.debug(`Token algorithm: ${algorithm}, kid: ${decodedHeader.header.kid || 'none'}`);
+
+      // Try to verify with the detected algorithm
+      // Supabase can use HS256 (symmetric) or RS256 (asymmetric)
+      let decoded: SupabaseJwtPayload;
+      
+      try {
+        // Try with the algorithm from the token header
+        if (algorithm === 'HS256') {
+          // HS256 uses symmetric key (JWT secret)
+          decoded = jwt.verify(token, this.jwtSecret, {
+            algorithms: ['HS256'],
+          }) as SupabaseJwtPayload;
+          this.logger.debug('Token verified using HS256 with JWT secret');
+        } else if (algorithm === 'RS256' || algorithm === 'ES256') {
+          // RS256/ES256 requires public key from JWKS endpoint
+          // Use Supabase client verification which handles this automatically
+          this.logger.debug(`Token uses ${algorithm}, using Supabase client verification`);
+          return await this.verifyTokenWithSupabase(token);
+        } else {
+          // Try with the detected algorithm (might work if it's still symmetric)
+          this.logger.debug(`Attempting verification with algorithm: ${algorithm}`);
+          decoded = jwt.verify(token, this.jwtSecret, {
+            algorithms: [algorithm as jwt.Algorithm],
+          }) as SupabaseJwtPayload;
+        }
+      } catch (verifyError) {
+        // Log the specific error for debugging
+        if (verifyError instanceof jwt.JsonWebTokenError) {
+          this.logger.warn(`JWT verification error: ${verifyError.message}`);
+          
+          // If it's an algorithm mismatch, try Supabase client verification
+          if (verifyError.message.includes('algorithm') || 
+              verifyError.message.includes('invalid algorithm')) {
+            this.logger.debug('Algorithm mismatch detected, using Supabase client verification');
+            return await this.verifyTokenWithSupabase(token);
+          }
+        }
+        
+        // For other errors, try Supabase client as fallback
+        this.logger.debug('Direct JWT verification failed, trying Supabase client verification');
+        return await this.verifyTokenWithSupabase(token);
+      }
 
       // Validate required claims
       if (!decoded.sub) {
@@ -102,6 +148,41 @@ export class SupabaseService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.error(`Token verification error: ${errorMessage}`);
+      throw new Error('Token verification failed');
+    }
+  }
+
+  /**
+   * Verify token using Supabase client (fallback for RS256 tokens or when JWT secret doesn't match)
+   * Uses Supabase's getUser method which handles both HS256 and RS256 tokens automatically
+   * @param token - JWT token from Authorization header
+   * @returns Authenticated user information
+   */
+  private async verifyTokenWithSupabase(token: string): Promise<AuthenticatedUser> {
+    try {
+      // Use Supabase's built-in getUser method which handles token verification
+      // This works for both HS256 and RS256 tokens
+      const { data: { user }, error } = await this.supabase.auth.getUser(token);
+      
+      if (error) {
+        this.logger.warn(`Supabase getUser failed: ${error.message}`);
+        throw new Error(`Token verification failed: ${error.message}`);
+      }
+
+      if (!user) {
+        throw new Error('User not found in token');
+      }
+
+      this.logger.debug(`Token verified via Supabase client for user: ${user.id}`);
+
+      return {
+        userId: user.id,
+        email: user.email,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Supabase verification error: ${errorMessage}`);
       throw new Error('Token verification failed');
     }
   }

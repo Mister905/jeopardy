@@ -10,6 +10,8 @@ import {
   Clue,
 } from '@prisma/client';
 import { CreateGameResult } from './types';
+import { ClueNotFoundException } from './exceptions/clue-not-found.exception';
+import { GameStateException } from './exceptions/game-state.exception';
 
 @Injectable()
 export class GameService {
@@ -330,6 +332,13 @@ export class GameService {
     const jeopardyClues = await this.getCluesForCategories(jeopardyCategories, Round.JEOPARDY, 1);
     const doubleJeopardyClues = await this.getCluesForCategories(doubleJeopardyCategories, Round.DOUBLE_JEOPARDY, 2);
 
+    // Validate that we have clues before proceeding
+    if (jeopardyClues.length === 0 || doubleJeopardyClues.length === 0) {
+      const errorMsg = `Cannot start game: insufficient clues. Jeopardy: ${jeopardyClues.length}, Double Jeopardy: ${doubleJeopardyClues.length}`;
+      this.logger.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
     // Step 4: Create GameClue records and update game state in transaction
     const updatedGame = await prisma.$transaction(async (tx) => {
       // Create GameClue records for Jeopardy round
@@ -348,10 +357,33 @@ export class GameService {
         wager: clue.dailyDouble ? null : undefined,
       }));
 
+      const totalClues = jeopardyGameClues.length + doubleJeopardyGameClues.length;
+
       // Create all GameClue records
-      await tx.gameClue.createMany({
+      const createResult = await tx.gameClue.createMany({
         data: [...jeopardyGameClues, ...doubleJeopardyGameClues],
       });
+
+      // Verify that GameClues were actually created
+      if (createResult.count === 0) {
+        throw new Error(`Failed to create GameClue records. Expected ${totalClues} clues.`);
+      }
+
+      if (createResult.count !== totalClues) {
+        this.logger.warn(
+          `Created ${createResult.count} GameClue records but expected ${totalClues} for game ${gameId}`,
+        );
+      }
+
+      // Verify GameClues exist before updating state
+      const createdClues = await tx.gameClue.findMany({
+        where: { gameId },
+        take: 1,
+      });
+
+      if (createdClues.length === 0) {
+        throw new Error(`GameClue records were not created for game ${gameId}`);
+      }
 
       // Update game state to ACTIVE
       const updated = await tx.game.update({
@@ -360,7 +392,7 @@ export class GameService {
       });
 
       this.logger.log(
-        `Created ${jeopardyGameClues.length + doubleJeopardyGameClues.length} GameClue records for game ${gameId}`,
+        `Created ${createResult.count} GameClue records for game ${gameId} and set state to ACTIVE`,
       );
 
       return updated;
@@ -671,6 +703,43 @@ export class GameService {
         ],
       });
 
+      // If game is ACTIVE but no clues found, this indicates the game wasn't properly started
+      if (gameClues.length === 0 && game.state === GameState.ACTIVE) {
+        this.logger.warn(`Game ${gameId} is ACTIVE but has no gameClues for round ${targetRound}. Game may not have been properly started. Attempting to recover...`);
+        
+        // Check if there are ANY gameClues for this game
+        const allGameClues = await prisma.gameClue.findMany({
+          where: { gameId },
+          take: 1,
+        });
+
+        // If no gameClues exist at all, reset game to PENDING state
+        if (allGameClues.length === 0) {
+          this.logger.warn(`Game ${gameId} is ACTIVE but has no gameClues. Resetting state to PENDING.`);
+          await prisma.game.update({
+            where: { id: gameId },
+            data: { state: GameState.PENDING },
+          });
+          
+          return {
+            gameId,
+            currentRound: null,
+            gameState: GameState.PENDING,
+            score: game.score,
+            board: null,
+          };
+        }
+
+        // Return null board to indicate the board isn't available yet
+        return {
+          gameId,
+          currentRound: null,
+          gameState: game.state,
+          score: game.score,
+          board: null,
+        };
+      }
+
       // Group clues by category
       const categoryMap = new Map<string, typeof gameClues>();
 
@@ -748,20 +817,121 @@ export class GameService {
     }
 
     if (game.state !== GameState.ACTIVE) {
-      throw new Error(`Game is not in an active state: ${game.state}`);
+      throw new GameStateException(game.state, GameState.ACTIVE);
     }
 
-    // TODO: Implement clue answering logic
-    // This requires:
-    // 1. Find GameClue by ID
-    // 2. Verify clue belongs to game
-    // 3. Verify clue is not already resolved
-    // 4. Calculate score delta
-    // 5. Update game score
-    // 6. Update clue state to RESOLVED
-    // 7. Check if all clues resolved, transition to FINAL_PENDING if so
+    const prisma = this.prismaService.client;
 
-    throw new Error('Clue answering not yet implemented');
+    // Find GameClue by ID with related clue and game
+    const gameClue = await prisma.gameClue.findUnique({
+      where: { id: clueId },
+      include: {
+        clue: true,
+        game: true,
+      },
+    });
+
+    if (!gameClue) {
+      throw new ClueNotFoundException(clueId);
+    }
+
+    // Validate GameClue belongs to the game
+    if (gameClue.gameId !== gameId) {
+      throw new ClueNotFoundException(clueId);
+    }
+
+    // Validate GameClue is not already resolved
+    if (gameClue.state === ClueState.RESOLVED) {
+      throw new Error(`Clue ${clueId} has already been resolved`);
+    }
+
+    // Validate GameClue is UNANSWERED or ANSWERED (ANSWERED for Daily Doubles that have wager submitted)
+    if (gameClue.state !== ClueState.UNANSWERED && gameClue.state !== ClueState.ANSWERED) {
+      throw new Error(`Clue ${clueId} is in invalid state: ${gameClue.state}. Expected UNANSWERED or ANSWERED`);
+    }
+
+    // Calculate score delta
+    // For Daily Doubles: use wager amount if set, otherwise use clue value
+    const baseValue = gameClue.wager && gameClue.wager > 0 
+      ? gameClue.wager 
+      : gameClue.clue.value;
+    
+    const scoreDelta = correct ? baseValue : -baseValue;
+    const newScore = game.score + scoreDelta; // Scores may be negative
+
+    // Get the round of the clue for round completion check
+    const clueRound = gameClue.clue.round;
+
+    // Update GameClue and Game score in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Update GameClue
+      const updatedGameClue = await tx.gameClue.update({
+        where: { id: clueId },
+        data: {
+          state: ClueState.RESOLVED,
+          scoreDelta,
+          answeredAt: new Date(),
+        },
+      });
+
+      // Update game score
+      await tx.game.update({
+        where: { id: gameId },
+        data: { score: newScore },
+      });
+
+      // Check if all clues in both Jeopardy and Double Jeopardy rounds are resolved
+      // Only transition to FINAL_PENDING when BOTH rounds are complete
+      if (clueRound !== Round.FINAL) {
+        // Get all GameClues for Jeopardy round
+        const jeopardyClues = await tx.gameClue.findMany({
+          where: {
+            gameId,
+            clue: {
+              round: Round.JEOPARDY,
+            },
+          },
+        });
+
+        // Get all GameClues for Double Jeopardy round
+        const doubleJeopardyClues = await tx.gameClue.findMany({
+          where: {
+            gameId,
+            clue: {
+              round: Round.DOUBLE_JEOPARDY,
+            },
+          },
+        });
+
+        // Check if all clues in both rounds are resolved
+        const jeopardyComplete = jeopardyClues.length > 0 && 
+          jeopardyClues.every((gc) => gc.state === ClueState.RESOLVED);
+        const doubleJeopardyComplete = doubleJeopardyClues.length > 0 && 
+          doubleJeopardyClues.every((gc) => gc.state === ClueState.RESOLVED);
+
+        // Only transition if both rounds are complete
+        if (jeopardyComplete && doubleJeopardyComplete) {
+          await tx.game.update({
+            where: { id: gameId },
+            data: { state: GameState.FINAL_PENDING },
+          });
+          this.logger.log(
+            `All clues in both Jeopardy and Double Jeopardy rounds resolved. Game ${gameId} transitioned to FINAL_PENDING`,
+          );
+        }
+      }
+
+      return updatedGameClue;
+    });
+
+    this.logger.log(
+      `Clue ${clueId} answered: ${correct ? 'correct' : 'incorrect'}. Score delta: ${scoreDelta}, New score: ${newScore}`,
+    );
+
+    return {
+      gameClue: result,
+      newScore,
+    };
   }
 
   /**

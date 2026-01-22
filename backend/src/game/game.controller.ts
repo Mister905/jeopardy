@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { GameService } from './game.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -278,8 +279,10 @@ export class GameController {
       };
     } catch (error) {
       this.logger.error(`Failed to answer clue: ${error instanceof Error ? error.message : String(error)}`);
-      if (error instanceof Error && error.message.includes('Clue not found')) {
-        throw new ClueNotFoundException(clueId);
+      // ClueNotFoundException is already handled by handleServiceError
+      // Check for "already resolved" error and convert to BadRequest
+      if (error instanceof Error && error.message.includes('already been resolved')) {
+        throw new BadRequestException(error.message);
       }
       this.handleServiceError(error, gameId, user.userId);
     }

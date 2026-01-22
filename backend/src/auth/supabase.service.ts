@@ -60,7 +60,10 @@ export class SupabaseService {
       }
 
       const algorithm = decodedHeader.header.alg as string;
-      this.logger.debug(`Token algorithm: ${algorithm}, kid: ${decodedHeader.header.kid || 'none'}`);
+      // Only log algorithm details in development mode
+      if (process.env.NODE_ENV === 'development') {
+        this.logger.debug(`Token algorithm: ${algorithm}, kid: ${decodedHeader.header.kid || 'none'}`);
+      }
 
       // Try to verify with the detected algorithm
       // Supabase can use HS256 (symmetric) or RS256 (asymmetric)
@@ -73,11 +76,16 @@ export class SupabaseService {
           decoded = jwt.verify(token, this.jwtSecret, {
             algorithms: ['HS256'],
           }) as SupabaseJwtPayload;
-          this.logger.debug('Token verified using HS256 with JWT secret');
+          // Only log in development mode
+          if (process.env.NODE_ENV === 'development') {
+            this.logger.debug('Token verified using HS256 with JWT secret');
+          }
         } else if (algorithm === 'RS256' || algorithm === 'ES256') {
           // RS256/ES256 requires public key from JWKS endpoint
           // Use Supabase client verification which handles this automatically
-          this.logger.debug(`Token uses ${algorithm}, using Supabase client verification`);
+          if (process.env.NODE_ENV === 'development') {
+            this.logger.debug(`Token uses ${algorithm}, using Supabase client verification`);
+          }
           return await this.verifyTokenWithSupabase(token);
         } else {
           // Try with the detected algorithm (might work if it's still symmetric)
@@ -124,7 +132,10 @@ export class SupabaseService {
         email: decoded.email,
       };
 
-      this.logger.debug(`Token verified for user: ${authenticatedUser.userId}`);
+      // Only log in development mode to reduce noise
+      if (process.env.NODE_ENV === 'development') {
+        this.logger.debug(`Token verified for user: ${authenticatedUser.userId}`);
+      }
       return authenticatedUser;
     } catch (error) {
       // Re-throw custom errors (like missing sub claim) as-is
@@ -173,7 +184,10 @@ export class SupabaseService {
         throw new Error('User not found in token');
       }
 
-      this.logger.debug(`Token verified via Supabase client for user: ${user.id}`);
+      // Only log in development mode to reduce noise
+      if (process.env.NODE_ENV === 'development') {
+        this.logger.debug(`Token verified via Supabase client for user: ${user.id}`);
+      }
 
       return {
         userId: user.id,

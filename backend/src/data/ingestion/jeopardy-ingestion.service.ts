@@ -18,8 +18,9 @@ interface ParsedFileData {
 export class JeopardyIngestionService {
   private readonly logger = new Logger(JeopardyIngestionService.name);
   private readonly batchSize = 100; // Batch size for processing
-  private readonly insertBatchSize = 25; // Smaller batch size for inserts to avoid transaction timeout
-  private readonly transactionTimeout = 10000; // 10 seconds timeout for transactions
+  private readonly insertBatchSize = 20; // Smaller batch size for inserts to avoid transaction timeout
+  private readonly transactionTimeout = 60000; // 60 seconds timeout for transactions (increased to handle large batches)
+  private readonly maxRetries = 3; // Maximum number of retries for failed transactions
 
   // Valid dollar values for each round
   private readonly jeopardyValues = [200, 400, 600, 800, 1000];
@@ -339,46 +340,68 @@ export class JeopardyIngestionService {
             insertIdx,
             insertIdx + this.insertBatchSize,
           );
-          try {
-            await prisma.$transaction(
-              async (tx) => {
-                await Promise.all(
-                  insertBatch.map((clue) =>
-                    tx.clue.create({
-                      data: {
-                        category: clue.category.trim(),
-                        round: clue.round === '1' ? Round.JEOPARDY : Round.DOUBLE_JEOPARDY,
-                        value: clue.value,
-                        question: clue.question.trim(),
-                        answer: clue.answer.trim(),
-                        dailyDouble: clue.dailyDouble,
-                      },
-                    }),
-                  ),
+          
+          // Retry logic for timeout errors
+          let retryCount = 0;
+          let inserted = false;
+          while (retryCount < this.maxRetries && !inserted) {
+            try {
+              await prisma.$transaction(
+                async (tx) => {
+                  await Promise.all(
+                    insertBatch.map((clue) =>
+                      tx.clue.create({
+                        data: {
+                          category: clue.category.trim(),
+                          round: clue.round === '1' ? Round.JEOPARDY : Round.DOUBLE_JEOPARDY,
+                          value: clue.value,
+                          question: clue.question.trim(),
+                          answer: clue.answer.trim(),
+                          dailyDouble: clue.dailyDouble,
+                        },
+                      }),
+                    ),
+                  );
+                },
+                {
+                  timeout: this.transactionTimeout,
+                },
+              );
+
+              result.cluesInserted += insertBatch.length;
+              this.logger.debug(
+                `Inserted ${insertBatch.length} clues (sub-batch ${Math.floor(insertIdx / this.insertBatchSize) + 1})`,
+              );
+              inserted = true;
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
+              const isTimeout = errorMessage.includes('SocketTimeout') || 
+                               errorMessage.includes('timeout') ||
+                               errorMessage.includes('Timeout');
+              
+              retryCount++;
+              
+              if (isTimeout && retryCount < this.maxRetries) {
+                this.logger.warn(
+                  `Transaction timeout (attempt ${retryCount}/${this.maxRetries}), retrying in 2 seconds...`,
                 );
-              },
-              {
-                timeout: this.transactionTimeout,
-              },
-            );
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                continue;
+              }
+              
+              this.logger.error(`Error inserting sub-batch: ${errorMessage}`);
 
-            result.cluesInserted += insertBatch.length;
-            this.logger.debug(
-              `Inserted ${insertBatch.length} clues (sub-batch ${Math.floor(insertIdx / this.insertBatchSize) + 1})`,
-            );
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            this.logger.error(`Error inserting sub-batch: ${errorMessage}`);
-
-            // Add error for each clue in the failed sub-batch
-            insertBatch.forEach((clue) => {
-              result.errors.push({
-                clue: clue,
-                message: `Insertion failed: ${errorMessage}`,
-                type: 'database',
+              // Add error for each clue in the failed sub-batch
+              insertBatch.forEach((clue) => {
+                result.errors.push({
+                  clue: clue,
+                  message: `Insertion failed: ${errorMessage}`,
+                  type: 'database',
+                });
               });
-            });
+              break; // Exit retry loop on non-timeout errors or max retries
+            }
           }
         }
         this.logger.log(

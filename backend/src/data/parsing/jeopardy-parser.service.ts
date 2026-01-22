@@ -344,8 +344,10 @@ export class JeopardyParserService {
       seasonNumber,
       round: row.round as '1' | '2',
       category: row.category.trim(),
-      answer: row.answer.trim(),
-      question: row.question.trim(),
+      // Note: TSV file has columns labeled backwards from Jeopardy terminology
+      // TSV "answer" column = clue text (what's shown), TSV "question" column = response
+      question: row.answer.trim(), // Clue text from TSV "answer" column
+      answer: row.question.trim(), // Response from TSV "question" column
       value: clueValue,
       dailyDouble: dailyDoubleValue > 0,
       sourceFile,

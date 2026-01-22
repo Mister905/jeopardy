@@ -45,6 +45,23 @@ export default function GameDetailPage() {
   const error = useAppSelector((state) => state.game.error);
   const isPolling = useAppSelector((state) => state.game.isPolling);
   const loading = useAppSelector((state) => !state.game.game && !state.game.error);
+  const reduxGameId = useAppSelector((state) => state.game.gameId);
+  
+  // Ensure we always have a gameId - use params first, then Redux, then game.id
+  const effectiveGameId = gameId || reduxGameId || game?.id;
+  
+  // Debug: Log gameId sources
+  useEffect(() => {
+    if (selectedClue && selectedClue.state === 'ANSWERED') {
+      console.log('[GamePage] gameId sources:', {
+        paramsId: gameId,
+        reduxGameId,
+        gameId: game?.id,
+        effectiveGameId,
+        hasEffectiveGameId: !!effectiveGameId,
+      });
+    }
+  }, [selectedClue?.state, gameId, reduxGameId, game?.id, effectiveGameId]);
 
   // Initialize game data on mount
   useEffect(() => {
@@ -81,6 +98,68 @@ export default function GameDetailPage() {
       router.push('/auth/login');
     }
   }, [error, router]);
+
+  // Debug: Log when rendering ANSWERED clue
+  useEffect(() => {
+    if (selectedClue && selectedClue.state === 'ANSWERED') {
+      console.log('[GamePage] ANSWERED clue rendered:', {
+        hasGame: !!game,
+        gameId: game?.id,
+        hasGameClues: !!game?.gameClues,
+        gameCluesLength: game?.gameClues?.length || 0,
+        selectedClueGameClueId: selectedClue.gameClueId,
+        selectedClueClueId: selectedClue.clueId,
+        hasAnswer: !!selectedClue.answer,
+        selectedClueKeys: Object.keys(selectedClue),
+        gameClueIds: game?.gameClues?.map(gc => gc.id).slice(0, 5), // First 5 for brevity
+        clueIds: game?.gameClues?.map(gc => gc.clueId).slice(0, 5),
+      });
+      
+      // If gameClues is missing, fetch it
+      if (game && (!game.gameClues || game.gameClues.length === 0)) {
+        console.log('[GamePage] gameClues missing, fetching game data');
+        dispatch(fetchGameData(game.id));
+      }
+    }
+  }, [selectedClue?.state, selectedClue?.gameClueId, selectedClue?.clueId, game?.gameClues, game, dispatch]);
+
+  // Fetch answer for ANSWERED clues that don't have it
+  useEffect(() => {
+    if (
+      selectedClue &&
+      selectedClue.state === 'ANSWERED' &&
+      !selectedClue.answer &&
+      game
+    ) {
+      // If gameClues is missing or empty, fetch game data
+      if (!game.gameClues || game.gameClues.length === 0) {
+        console.log('[GamePage] gameClues missing, fetching game data');
+        dispatch(fetchGameData(game.id));
+        return;
+      }
+      
+      // Try to find the answer in existing game state
+      const gameClue = game.gameClues.find(
+        (gc) => (selectedClue.gameClueId && gc.id === selectedClue.gameClueId) || 
+                (selectedClue.clueId && gc.clueId === selectedClue.clueId),
+      );
+      
+      if (gameClue && gameClue.clue.answer) {
+        // Update selectedClue with answer
+        dispatch(setSelectedClue({
+          ...selectedClue,
+          answer: gameClue.clue.answer,
+        }));
+      } else {
+        console.warn('[GamePage] Answer not found in gameClues', {
+          gameClueFound: !!gameClue,
+          gameClueId: selectedClue.gameClueId,
+          clueId: selectedClue.clueId,
+          availableIds: game.gameClues.map(gc => ({ id: gc.id, clueId: gc.clueId })),
+        });
+      }
+    }
+  }, [selectedClue?.state, selectedClue?.answer, selectedClue?.gameClueId, selectedClue?.clueId, game?.gameClues, game, gameId, dispatch]);
 
   const handleStartGame = async () => {
     if (!game) return;
@@ -182,13 +261,43 @@ export default function GameDetailPage() {
       )}
 
       {/* ACTIVE State - Show Game Board */}
-      {game.state === 'ACTIVE' && board?.board && 'categories' in board.board && (
+      {game.state === 'ACTIVE' && (
         <div>
-          <GameBoard
-            board={board.board as JeopardyBoard}
-            gameId={gameId}
-            onClueClick={handleClueClick}
-          />
+          {board?.board && 'categories' in board.board ? (
+            <GameBoard
+              board={board.board as JeopardyBoard}
+              gameId={gameId}
+              onClueClick={handleClueClick}
+            />
+          ) : (
+            <div className="bg-white p-6 rounded-lg border border-gray-200">
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <LoadingSpinner size="lg" />
+                  <p className="mt-4 text-gray-600">Loading game board...</p>
+                  {error && (
+                    <div className="mt-4">
+                      <p className="text-sm text-red-600 mb-4">
+                        Failed to load board. The game may not have been started properly.
+                      </p>
+                      <Button
+                        onClick={() => dispatch(fetchGameData(gameId))}
+                        disabled={actionLoading}
+                        variant="secondary"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+                  {!error && !actionLoading && (
+                    <p className="mt-2 text-sm text-gray-500">
+                      If the board doesn't load, try refreshing the page.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -319,12 +428,33 @@ export default function GameDetailPage() {
             )}
 
             {selectedClue.state === 'ANSWERED' && (
-              <AnswerAdjudication
-                question={selectedClue.question}
-                answer={selectedClue.answer}
-                onAnswer={handleAnswerClue}
-                loading={actionLoading}
-              />
+              <>
+                {console.log('[GamePage] Rendering AnswerAdjudication', {
+                  selectedClueState: selectedClue.state,
+                  hasQuestion: !!selectedClue.question,
+                  hasAnswer: !!selectedClue.answer,
+                  hasGame: !!game,
+                  hasGameClues: !!game?.gameClues,
+                  gameCluesLength: game?.gameClues?.length || 0,
+                  gameClueId: selectedClue?.gameClueId,
+                  clueId: selectedClue?.clueId,
+                  paramsId: gameId,
+                  reduxGameId,
+                  gameIdFromGame: game?.id,
+                  effectiveGameId,
+                  hasEffectiveGameId: !!effectiveGameId,
+                })}
+                <AnswerAdjudication
+                  question={selectedClue.question}
+                  answer={selectedClue.answer}
+                  gameClues={game?.gameClues}
+                  gameClueId={selectedClue?.gameClueId}
+                  clueId={selectedClue?.clueId}
+                  gameId={effectiveGameId}
+                  onAnswer={handleAnswerClue}
+                  loading={actionLoading}
+                />
+              </>
             )}
 
             {selectedClue.state === 'RESOLVED' && (
@@ -346,11 +476,15 @@ export default function GameDetailPage() {
             )}
 
             {selectedClue.state === 'UNANSWERED' && !selectedClue.isDailyDouble && (
-              <AnswerAdjudication
-                question={selectedClue.question}
-                onAnswer={handleAnswerClue}
-                loading={actionLoading}
-              />
+              selectedClue.question && selectedClue.question.trim() ? (
+                <AnswerAdjudication
+                  question={selectedClue.question}
+                  onAnswer={handleAnswerClue}
+                  loading={actionLoading}
+                />
+              ) : (
+                <div className="text-gray-600">Loading question...</div>
+              )
             )}
           </div>
         </div>

@@ -22,7 +22,9 @@
     "verify:parsed-output": "ts-node src/scripts/verify-parsed-output.ts",
     "parse:final-jeopardy:full": "npm run parse:final-jeopardy && npm run verify:parsed-output",
     "ingest:final-jeopardy": "ts-node src/scripts/run-final-jeopardy-ingestion.ts",
-    "ingest:jeopardy": "ts-node src/scripts/run-jeopardy-ingestion.ts"
+    "ingest:jeopardy": "ts-node src/scripts/run-jeopardy-ingestion.ts",
+    "clear:clues": "ts-node src/scripts/clear-clues.ts",
+    "count:clues": "ts-node src/scripts/count-clues.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

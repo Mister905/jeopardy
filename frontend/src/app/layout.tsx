@@ -18,7 +18,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col bg-gray-50">
+      <body 
+        className="min-h-screen flex flex-col" 
+        style={{ 
+          background: 'linear-gradient(to bottom, #2a1f5c 0%, #1a1442 100%)',
+        }}
+      >
         <Provider store={store}>
           <Header />
           <main className="flex-grow container mx-auto px-4 py-8">

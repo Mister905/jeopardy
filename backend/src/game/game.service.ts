@@ -329,8 +329,33 @@ export class GameService {
     // Step 3: Get all clues for selected categories with Daily Doubles
     // Jeopardy: exactly 1 Daily Double
     // Double Jeopardy: exactly 2 Daily Doubles
+    // If not enough Daily Doubles are found in the database, they will be dynamically assigned
+    // to clues in positions 3-5 (values 600, 800, 1000 for Jeopardy or 1200, 1600, 2000 for Double Jeopardy)
     const jeopardyClues = await this.getCluesForCategories(jeopardyCategories, Round.JEOPARDY, 1);
     const doubleJeopardyClues = await this.getCluesForCategories(doubleJeopardyCategories, Round.DOUBLE_JEOPARDY, 2);
+    
+    // Debug: Verify the clues returned have the correct Daily Double counts
+    const jeopardyDDCount = jeopardyClues.filter(c => c.dailyDouble).length;
+    const doubleJeopardyDDCount = doubleJeopardyClues.filter(c => c.dailyDouble).length;
+    this.logger.log(
+      `[DEBUG] Clues returned from getCluesForCategories: ` +
+      `Jeopardy: ${jeopardyClues.length} clues, ${jeopardyDDCount} Daily Doubles (expected 1), ` +
+      `Double Jeopardy: ${doubleJeopardyClues.length} clues, ${doubleJeopardyDDCount} Daily Doubles (expected 2)`,
+    );
+    
+    if (jeopardyDDCount !== 1 || doubleJeopardyDDCount !== 2) {
+      this.logger.error(
+        `[CRITICAL] getCluesForCategories returned incorrect Daily Double counts! ` +
+        `Jeopardy: ${jeopardyDDCount} (expected 1), Double Jeopardy: ${doubleJeopardyDDCount} (expected 2)`,
+      );
+      // Log sample clues to debug
+      this.logger.error(
+        `Sample Jeopardy clues dailyDouble values: ${jeopardyClues.slice(0, 5).map(c => c.dailyDouble).join(', ')}`,
+      );
+      this.logger.error(
+        `Sample Double Jeopardy clues dailyDouble values: ${doubleJeopardyClues.slice(0, 5).map(c => c.dailyDouble).join(', ')}`,
+      );
+    }
 
     // Validate that we have clues before proceeding
     if (jeopardyClues.length === 0 || doubleJeopardyClues.length === 0) {
@@ -341,12 +366,55 @@ export class GameService {
 
     // Step 4: Create GameClue records and update game state in transaction
     const updatedGame = await prisma.$transaction(async (tx) => {
+      // Debug: Count Daily Doubles before creating GameClue records
+      const jeopardyDailyDoubleCount = jeopardyClues.filter(c => c.dailyDouble).length;
+      const doubleJeopardyDailyDoubleCount = doubleJeopardyClues.filter(c => c.dailyDouble).length;
+      this.logger.log(
+        `[VALIDATION] Creating GameClue records: Jeopardy Daily Doubles: ${jeopardyDailyDoubleCount}/1 (expected 1), ` +
+        `Double Jeopardy Daily Doubles: ${doubleJeopardyDailyDoubleCount}/2 (expected 2)`,
+      );
+      
+      // Log sample clues to debug
+      if (jeopardyDailyDoubleCount > 1 || doubleJeopardyDailyDoubleCount > 2) {
+        this.logger.error(
+          `[VALIDATION FAILED] Too many Daily Doubles detected! ` +
+          `Jeopardy: ${jeopardyDailyDoubleCount} clues with dailyDouble=true, ` +
+          `Double Jeopardy: ${doubleJeopardyDailyDoubleCount} clues with dailyDouble=true. ` +
+          `Sample Jeopardy clues: ${jeopardyClues.slice(0, 3).map(c => `{id: ${c.id}, dailyDouble: ${c.dailyDouble}}`).join(', ')}`,
+        );
+      }
+
+      // Validate Daily Double counts
+      if (jeopardyDailyDoubleCount !== 1) {
+        this.logger.error(
+          `[VALIDATION ERROR] Invalid Daily Double count for Jeopardy round: ${jeopardyDailyDoubleCount} (expected 1)`,
+        );
+        throw new Error(
+          `Invalid Daily Double count for Jeopardy round: ${jeopardyDailyDoubleCount} (expected 1). ` +
+          `This indicates a bug in clue selection or all database clues are marked as Daily Doubles.`,
+        );
+      }
+      if (doubleJeopardyDailyDoubleCount !== 2) {
+        this.logger.error(
+          `[VALIDATION ERROR] Invalid Daily Double count for Double Jeopardy round: ${doubleJeopardyDailyDoubleCount} (expected 2)`,
+        );
+        throw new Error(
+          `Invalid Daily Double count for Double Jeopardy round: ${doubleJeopardyDailyDoubleCount} (expected 2). ` +
+          `This indicates a bug in clue selection or all database clues are marked as Daily Doubles.`,
+        );
+      }
+      
+      this.logger.log(`[VALIDATION PASSED] Daily Double counts are correct`);
+
       // Create GameClue records for Jeopardy round
+      // Create GameClue records with isDailyDouble flag to track Daily Doubles
+      // This handles both database Daily Doubles and dynamically assigned ones
       const jeopardyGameClues = jeopardyClues.map((clue) => ({
         gameId,
         clueId: clue.id,
         state: ClueState.UNANSWERED,
-        wager: clue.dailyDouble ? null : undefined, // Daily Doubles will have wager set later
+        isDailyDouble: clue.dailyDouble,
+        wager: clue.dailyDouble ? null : undefined, // Only set wager for Daily Doubles
       }));
 
       // Create GameClue records for Double Jeopardy round
@@ -354,7 +422,8 @@ export class GameService {
         gameId,
         clueId: clue.id,
         state: ClueState.UNANSWERED,
-        wager: clue.dailyDouble ? null : undefined,
+        isDailyDouble: clue.dailyDouble,
+        wager: clue.dailyDouble ? null : undefined, // Only set wager for Daily Doubles
       }));
 
       const totalClues = jeopardyGameClues.length + doubleJeopardyGameClues.length;
@@ -413,27 +482,8 @@ export class GameService {
     const prisma = this.prismaService.client;
     const requiredValues = round === Round.JEOPARDY ? [200, 400, 600, 800, 1000] : [400, 800, 1200, 1600, 2000];
 
-    // First check if any clues exist for this round
-    const totalClues = await prisma.clue.count({
-      where: { round },
-    });
-
-    if (totalClues === 0) {
-      throw new Error(
-        `No clues found in database for ${round} round. ` +
-        `Please run the Jeopardy ingestion script: npm run ingest:jeopardy`,
-      );
-    }
-
-    // Get distinct categories for the round
-    const allCategories = await prisma.clue.findMany({
-      where: { round },
-      select: { category: true },
-      distinct: ['category'],
-    });
-
-    // Filter categories to only those that have clues for all required values
-    // Use a single query to count clues per category:value combination
+    // Optimize: Use a single query to get category:value counts and check for valid categories
+    // This replaces the previous 3 separate queries (count, findMany, groupBy)
     const categoryValueCounts = await prisma.clue.groupBy({
       by: ['category', 'value'],
       where: {
@@ -442,6 +492,13 @@ export class GameService {
       },
       _count: { id: true },
     });
+
+    if (categoryValueCounts.length === 0) {
+      throw new Error(
+        `No clues found in database for ${round} round. ` +
+        `Please run the Jeopardy ingestion script: npm run ingest:jeopardy`,
+      );
+    }
 
     // Group by category and check if each has all required values
     const categoryValueMap = new Map<string, Set<number>>();
@@ -463,8 +520,6 @@ export class GameService {
       throw new Error(
         `Not enough complete categories available for ${round} round. ` +
         `Found ${validCategories.length} categories with all required values, need ${count}. ` +
-        `Total categories in database: ${allCategories.length}. ` +
-        `Total clues in database: ${totalClues}. ` +
         `Please run the Jeopardy ingestion script: npm run ingest:jeopardy`,
       );
     }
@@ -514,25 +569,107 @@ export class GameService {
 
     // First pass: select clues, preferring non-Daily Doubles
     const selectedDailyDoubles: Clue[] = [];
+    const selectedRegularClues: Clue[] = [];
     
     for (const category of categories) {
       for (const value of values) {
         const clues = clueMap.get(`${category}:${value}`)!;
+        
+        // Debug: Check how many Daily Doubles are in the database for this category:value
+        const dailyDoubleCount = clues.filter(c => c.dailyDouble).length;
+        const nonDailyDoubleCount = clues.filter(c => !c.dailyDouble).length;
+        
+        if (dailyDoubleCount === clues.length) {
+          this.logger.warn(
+            `All clues in database are Daily Doubles for category "${category}", value ${value}, round ${round}. ` +
+            `This may indicate a data issue.`,
+          );
+        }
+        
         const nonDailyDouble = clues.find((c) => !c.dailyDouble);
         
         if (nonDailyDouble) {
           allClues.push(nonDailyDouble);
+          selectedRegularClues.push(nonDailyDouble);
         } else {
           // Only Daily Doubles available, use one
           const dailyDouble = clues.find((c) => c.dailyDouble)!;
           allClues.push(dailyDouble);
           selectedDailyDoubles.push(dailyDouble);
+          this.logger.warn(
+            `No non-Daily Double clue available for category "${category}", value ${value}, round ${round}. ` +
+            `Using Daily Double clue ${dailyDouble.id}`,
+          );
         }
       }
     }
+    
+    // If we had to use too many Daily Doubles because some category:value pairs only have Daily Doubles,
+    // try to replace some of the Daily Doubles we selected with regular clues from other category:value pairs
+    let currentDailyDoubleCount = allClues.filter((c) => c.dailyDouble).length;
+    if (currentDailyDoubleCount > requiredDailyDoubles) {
+      const excess = currentDailyDoubleCount - requiredDailyDoubles;
+      this.logger.warn(
+        `Too many Daily Doubles selected (${currentDailyDoubleCount}) due to limited availability. ` +
+        `Attempting to replace ${excess} Daily Double(s) with regular clues by swapping within categories.`,
+      );
+      
+      // Strategy: For each excess Daily Double, try to replace it with a regular clue from the SAME category:value pair
+      // If that's not possible (because the pair only has DDs), we need to use dynamic assignment to "un-mark" it
+      // by finding a regular clue from another category:value and swapping positions
+      let replaced = 0;
+      const dailyDoublesToReplace = selectedDailyDoubles.slice(0, excess);
+      
+      for (const dailyDoubleToReplace of dailyDoublesToReplace) {
+        if (replaced >= excess) break;
+        
+        const category = dailyDoubleToReplace.category;
+        const originalValue = dailyDoubleToReplace.value;
+        const originalKey = `${category}:${originalValue}`;
+        
+        // First, try to find a regular clue from the SAME category:value pair
+        const alternatives = clueMap.get(originalKey);
+        if (alternatives) {
+          const regularAlternative = alternatives.find(
+            (c) => !c.dailyDouble && c.id !== dailyDoubleToReplace.id,
+          );
+          
+          if (regularAlternative) {
+            // Perfect! Replace the Daily Double with a regular clue from the same category:value
+            const dailyDoubleIndex = allClues.findIndex((c) => c.id === dailyDoubleToReplace.id);
+            if (dailyDoubleIndex > -1) {
+              allClues[dailyDoubleIndex] = regularAlternative;
+              replaced++;
+              this.logger.debug(
+                `Replaced Daily Double ${dailyDoubleToReplace.id} (${category}, ${originalValue}) ` +
+                `with regular clue ${regularAlternative.id} from same category:value pair`,
+              );
+              continue; // Successfully replaced, move to next
+            }
+          }
+        }
+        
+        // If no regular clue available in the same category:value, we'll use dynamic "un-assignment"
+        // in the "too many Daily Doubles" section below to convert it back to a regular clue
+      }
+      
+      // Recalculate count after replacements
+      currentDailyDoubleCount = allClues.filter((c) => c.dailyDouble).length;
+      this.logger.debug(
+        `After initial replacement attempt: ${currentDailyDoubleCount} Daily Doubles (replaced ${replaced} of ${excess} excess)`,
+      );
+      
+      if (replaced < excess) {
+        const stillNeeded = excess - replaced;
+        this.logger.warn(
+          `Could only replace ${replaced} of ${excess} excess Daily Doubles through same-category:value replacement. ` +
+          `Still need to reduce ${stillNeeded} more. Will use dynamic un-assignment.`,
+        );
+      }
+    }
 
-    // Count Daily Doubles we have
-    const currentDailyDoubleCount = allClues.filter((c) => c.dailyDouble).length;
+    // Count Daily Doubles we have (after any replacements)
+    // currentDailyDoubleCount is already set above, either from initial count or after replacement
 
     if (currentDailyDoubleCount === requiredDailyDoubles) {
       // Perfect!
@@ -540,26 +677,139 @@ export class GameService {
     } else if (currentDailyDoubleCount < requiredDailyDoubles) {
       // Need more Daily Doubles - replace some regular clues with Daily Doubles
       const needed = requiredDailyDoubles - currentDailyDoubleCount;
-      const regularClues = allClues.filter((c) => !c.dailyDouble);
-      const shuffled = regularClues.sort(() => Math.random() - 0.5);
-
-      for (let i = 0; i < needed && i < shuffled.length; i++) {
-        const clueToReplace = shuffled[i];
-        const key = `${clueToReplace.category}:${clueToReplace.value}`;
-        const alternatives = clueMap.get(key)!;
-        const dailyDoubleAlternative = alternatives.find((c) => c.dailyDouble && c.id !== clueToReplace.id);
-
-        if (dailyDoubleAlternative) {
-          // Replace with a Daily Double version
-          const index = allClues.indexOf(clueToReplace);
-          allClues[index] = dailyDoubleAlternative;
+      
+      // First, collect all available Daily Doubles from the clueMap
+      // and count how many are available per category:value combination
+      const availableDailyDoublesByKey = new Map<string, Clue[]>();
+      let totalAvailableDailyDoubles = 0;
+      
+      for (const [key, clues] of clueMap.entries()) {
+        const dailyDoubles = clues.filter((c) => c.dailyDouble);
+        if (dailyDoubles.length > 0) {
+          availableDailyDoublesByKey.set(key, dailyDoubles);
+          totalAvailableDailyDoubles += dailyDoubles.length;
         }
+      }
+
+      // Try to replace regular clues with Daily Doubles from the database
+      // We can only replace within the same category:value pair to maintain board structure
+      let replaced = 0;
+      
+      if (totalAvailableDailyDoubles > 0) {
+        const regularClues = allClues.filter((c) => !c.dailyDouble);
+        const shuffled = regularClues.sort(() => Math.random() - 0.5);
+
+        for (const clueToReplace of shuffled) {
+          if (replaced >= needed) break;
+          
+          const key = `${clueToReplace.category}:${clueToReplace.value}`;
+          const availableDailyDoubles = availableDailyDoublesByKey.get(key);
+          
+          if (availableDailyDoubles && availableDailyDoubles.length > 0) {
+            // Find a Daily Double that's not already in allClues
+            const dailyDoubleAlternative = availableDailyDoubles.find(
+              (c) => c.id !== clueToReplace.id && !allClues.some((ac) => ac.id === c.id),
+            );
+
+            if (dailyDoubleAlternative) {
+              const index = allClues.indexOf(clueToReplace);
+              allClues[index] = dailyDoubleAlternative;
+              replaced++;
+              
+              // Remove the used Daily Double from available list
+              const indexInAvailable = availableDailyDoubles.indexOf(dailyDoubleAlternative);
+              availableDailyDoubles.splice(indexInAvailable, 1);
+              if (availableDailyDoubles.length === 0) {
+                availableDailyDoublesByKey.delete(key);
+              }
+            }
+          }
+        }
+      } else {
+        // No Daily Doubles available in database for selected categories
+        // We'll use dynamic assignment to create Daily Doubles from regular clues
+        this.logger.warn(
+          `No Daily Doubles available in database for selected ${round} categories. ` +
+          `Will use dynamic assignment to create ${needed} Daily Double(s) from regular clues.`,
+        );
+      }
+      
+      // If we don't have enough Daily Doubles from the database, use dynamic assignment
+      // This handles cases where selected categories have no Daily Doubles in the database
+      const finalCount = allClues.filter((c) => c.dailyDouble).length;
+      if (finalCount < requiredDailyDoubles) {
+        const stillNeeded = requiredDailyDoubles - finalCount;
+        
+        // Get eligible clues for dynamic Daily Double assignment
+        // Only assign to clues in positions 3-5 (values 600, 800, 1000 for Jeopardy or 1200, 1600, 2000 for Double Jeopardy)
+        const eligibleValues = round === Round.JEOPARDY ? [600, 800, 1000] : [1200, 1600, 2000];
+        const eligibleClues = allClues.filter(
+          (c) => !c.dailyDouble && eligibleValues.includes(c.value),
+        );
+        
+        if (eligibleClues.length < stillNeeded) {
+          // Log which category:value pairs have Daily Doubles available for debugging
+          const availableKeys = Array.from(availableDailyDoublesByKey.keys());
+          this.logger.warn(
+            `Failed to assign required Daily Doubles for ${round} round. ` +
+            `Required: ${requiredDailyDoubles}, Achieved: ${finalCount}, Still need: ${stillNeeded}. ` +
+            `Eligible clues for dynamic assignment: ${eligibleClues.length}. ` +
+            `Category:value pairs with available Daily Doubles: ${availableKeys.join(', ')}`,
+          );
+          
+          throw new Error(
+            `Failed to assign required Daily Doubles for ${round} round. ` +
+            `Required: ${requiredDailyDoubles}, Achieved: ${finalCount}. ` +
+            `Not enough eligible clues (values ${eligibleValues.join(', ')}) available for dynamic Daily Double assignment.`,
+          );
+        }
+        
+        // Randomly select clues from eligible positions and mark them as Daily Doubles
+        const shuffledEligible = eligibleClues.sort(() => Math.random() - 0.5);
+        const cluesToMarkAsDailyDouble = shuffledEligible.slice(0, stillNeeded);
+        
+        for (const clue of cluesToMarkAsDailyDouble) {
+          // Mark this clue as a Daily Double (modify in memory)
+          // Create a new object to avoid mutating the original if it's shared
+          const clueIndex = allClues.indexOf(clue);
+          if (clueIndex > -1) {
+            allClues[clueIndex] = { ...clue, dailyDouble: true };
+            this.logger.debug(
+              `Dynamically assigned Daily Double status to clue ${clue.id} ` +
+              `(category: ${clue.category}, value: ${clue.value})`,
+            );
+          }
+        }
+        
+        // Verify the count after assignment
+        const verifyCount = allClues.filter((c) => c.dailyDouble).length;
+        if (verifyCount !== requiredDailyDoubles) {
+          this.logger.error(
+            `Daily Double assignment verification failed for ${round} round. ` +
+            `Required: ${requiredDailyDoubles}, After assignment: ${verifyCount}`,
+          );
+          throw new Error(
+            `Failed to correctly assign Daily Doubles for ${round} round. ` +
+            `Required: ${requiredDailyDoubles}, Achieved: ${verifyCount}`,
+          );
+        }
+        
+        this.logger.log(
+          `Dynamically assigned ${cluesToMarkAsDailyDouble.length} Daily Double(s) ` +
+          `for ${round} round to reach required count of ${requiredDailyDoubles}`,
+        );
       }
     } else {
       // Too many Daily Doubles - replace some with regular clues
       const excess = currentDailyDoubleCount - requiredDailyDoubles;
+      this.logger.warn(
+        `Too many Daily Doubles (${currentDailyDoubleCount}, required ${requiredDailyDoubles}). ` +
+        `Attempting to replace ${excess} Daily Double(s) with regular clues.`,
+      );
+      
       const dailyDoubleClues = allClues.filter((c) => c.dailyDouble);
       const shuffled = dailyDoubleClues.sort(() => Math.random() - 0.5);
+      let replaced = 0;
 
       for (let i = 0; i < excess && i < shuffled.length; i++) {
         const clueToReplace = shuffled[i];
@@ -568,11 +818,58 @@ export class GameService {
         const regularAlternative = alternatives.find((c) => !c.dailyDouble && c.id !== clueToReplace.id);
 
         if (regularAlternative) {
-          // Replace with a regular version
+          // Replace with a regular version from the same category:value pair
           const index = allClues.indexOf(clueToReplace);
           allClues[index] = regularAlternative;
+          replaced++;
+          this.logger.debug(
+            `Replaced Daily Double ${clueToReplace.id} (${clueToReplace.category}, ${clueToReplace.value}) ` +
+            `with regular clue ${regularAlternative.id}`,
+          );
+        } else {
+          // No regular clue available in this category:value pair
+          // Use dynamic "un-assignment" - convert this Daily Double back to regular by removing the dailyDouble flag
+          // This is safe because we know we have too many Daily Doubles
+          const index = allClues.indexOf(clueToReplace);
+          if (index > -1) {
+            // Create a new clue object without the dailyDouble flag
+            allClues[index] = { ...clueToReplace, dailyDouble: false };
+            replaced++;
+            this.logger.debug(
+              `Dynamically un-assigned Daily Double status from clue ${clueToReplace.id} ` +
+              `(${clueToReplace.category}, ${clueToReplace.value}) to reduce excess count`,
+            );
+          }
         }
       }
+      
+      // Verify the count after replacement
+      const countAfterReplacement = allClues.filter((c) => c.dailyDouble).length;
+      this.logger.debug(
+        `After replacement: ${countAfterReplacement} Daily Doubles (replaced ${replaced} of ${excess} excess)`,
+      );
+      
+      if (countAfterReplacement !== requiredDailyDoubles) {
+        this.logger.error(
+          `Failed to correct Daily Double count through replacement. ` +
+          `Current: ${countAfterReplacement}, Required: ${requiredDailyDoubles}, ` +
+          `Replaced: ${replaced} of ${excess} excess.`,
+        );
+        // This will be caught by the final validation
+      }
+    }
+
+    // Final validation: ensure we have exactly the required number (runs for both too few and too many cases)
+    const finalDailyDoubleCount = allClues.filter((c) => c.dailyDouble).length;
+    if (finalDailyDoubleCount !== requiredDailyDoubles) {
+      this.logger.error(
+        `Daily Double count mismatch for ${round} round. ` +
+        `Required: ${requiredDailyDoubles}, Found: ${finalDailyDoubleCount}`,
+      );
+      throw new Error(
+        `Daily Double count mismatch for ${round} round. ` +
+        `Required: ${requiredDailyDoubles}, Found: ${finalDailyDoubleCount}`,
+      );
     }
 
     return allClues;
@@ -758,12 +1055,20 @@ export class GameService {
           const clue = gc.clue;
           const isAnswered = gc.state === ClueState.ANSWERED || gc.state === ClueState.RESOLVED;
 
+          // Determine Daily Double status:
+          // 1. For UNANSWERED clues, always return false (hide Daily Doubles)
+          // 2. For ANSWERED/RESOLVED clues, use isDailyDouble field (which matches clue.dailyDouble
+          //    at creation time, or is set to true for dynamically assigned Daily Doubles)
+          const isDailyDouble = gc.isDailyDouble;
+          
           return {
             gameClueId: gc.id,
             clueId: clue.id,
             value: clue.value,
             state: gc.state as 'UNANSWERED' | 'ANSWERED' | 'RESOLVED',
-            dailyDouble: clue.dailyDouble,
+            // Only reveal Daily Double status for ANSWERED or RESOLVED clues
+            // This prevents telegraphing which clues are Daily Doubles before selection
+            dailyDouble: gc.state === ClueState.UNANSWERED ? false : isDailyDouble,
             question: isAnswered ? clue.question : undefined,
             answer: gc.state === ClueState.RESOLVED ? clue.answer : undefined,
             wager: gc.wager || undefined,
@@ -850,11 +1155,24 @@ export class GameService {
       throw new Error(`Clue ${clueId} is in invalid state: ${gameClue.state}. Expected UNANSWERED or ANSWERED`);
     }
 
+    // Validate that Daily Doubles have a wager set before answering
+    if (gameClue.wager !== null && gameClue.wager <= 0) {
+      throw new Error(`Daily Double clue ${clueId} must have a valid wager amount before answering`);
+    }
+
     // Calculate score delta
-    // For Daily Doubles: use wager amount if set, otherwise use clue value
-    const baseValue = gameClue.wager && gameClue.wager > 0 
-      ? gameClue.wager 
-      : gameClue.clue.value;
+    // For Daily Doubles: always use wager amount (wager should be set before answering)
+    // For regular clues: use clue value
+    // Check if it's a Daily Double by checking if wager is not null (Daily Doubles have wager set after wager submission)
+    const isDailyDouble = gameClue.wager !== null;
+    const baseValue = isDailyDouble 
+      ? gameClue.wager! // Use wager amount for Daily Doubles (wager is guaranteed to be set)
+      : gameClue.clue.value; // Use clue value for regular clues
+    
+    this.logger.log(
+      `[answerClue] Calculating score delta: isDailyDouble=${isDailyDouble}, ` +
+      `wager=${gameClue.wager}, clueValue=${gameClue.clue.value}, baseValue=${baseValue}, correct=${correct}`,
+    );
     
     const scoreDelta = correct ? baseValue : -baseValue;
     const newScore = game.score + scoreDelta; // Scores may be negative
@@ -957,16 +1275,63 @@ export class GameService {
       throw new Error(`Game is not in an active state: ${game.state}`);
     }
 
-    // TODO: Implement wager submission logic
-    // This requires:
-    // 1. Find GameClue by ID
-    // 2. Verify clue is a Daily Double
-    // 3. Verify clue is UNANSWERED
-    // 4. Validate wager amount (min $5, max based on score and round)
-    // 5. Update GameClue with wager
-    // 6. Transition clue state to ANSWERED
+    const prisma = this.prismaService.client;
 
-    throw new Error('Clue wager submission not yet implemented');
+    // Find GameClue by ID with related clue and game
+    const gameClue = await prisma.gameClue.findUnique({
+      where: { id: clueId },
+      include: {
+        clue: true,
+        game: true,
+      },
+    });
+
+    if (!gameClue) {
+      throw new Error(`Clue not found: ${clueId}`);
+    }
+
+    // Validate GameClue belongs to the game
+    if (gameClue.gameId !== gameId) {
+      throw new Error(`Clue ${clueId} does not belong to game ${gameId}`);
+    }
+
+    // Verify clue is a Daily Double (check isDailyDouble field)
+    if (!gameClue.isDailyDouble) {
+      throw new Error(`Clue ${clueId} is not a Daily Double`);
+    }
+
+    // Verify clue is UNANSWERED
+    if (gameClue.state !== ClueState.UNANSWERED) {
+      throw new Error(`Clue ${clueId} is not in UNANSWERED state. Current state: ${gameClue.state}`);
+    }
+
+    // Validate wager amount
+    if (wager < 5) {
+      throw new Error('Wager must be at least $5');
+    }
+
+    // Calculate max wager: greater of (current score, round highest value)
+    const roundHighestValue = gameClue.clue.round === Round.DOUBLE_JEOPARDY ? 2000 : 1000;
+    const maxWager = Math.max(game.score, roundHighestValue);
+
+    if (wager > maxWager) {
+      throw new Error(`Wager cannot exceed maximum of $${maxWager}`);
+    }
+
+    // Update GameClue with wager and transition state to ANSWERED
+    const updatedGameClue = await prisma.gameClue.update({
+      where: { id: clueId },
+      data: {
+        wager,
+        state: ClueState.ANSWERED,
+      },
+    });
+
+    this.logger.log(
+      `Wager submitted for Daily Double clue ${clueId}: $${wager} (max: $${maxWager}, score: $${game.score})`,
+    );
+
+    return updatedGameClue;
   }
 
   /**
@@ -1088,5 +1453,44 @@ export class GameService {
       finalJeopardy: result.finalJeopardy,
       finalScore,
     };
+  }
+
+  /**
+   * End/abandon a game that is in progress
+   * Transitions the game to COMPLETED state
+   * @param gameId - Game ID
+   * @param userId - User ID for authorization
+   * @returns Updated game
+   */
+  async endGame(gameId: string, userId: string): Promise<Game> {
+    const game = await this.getGameById(gameId, userId);
+    if (!game) {
+      throw new Error('Game not found or access denied');
+    }
+
+    // Only allow ending games that are in progress
+    const endableStates: GameState[] = [
+      GameState.PENDING,
+      GameState.ACTIVE,
+      GameState.FINAL_PENDING,
+      GameState.FINAL_ACTIVE,
+    ];
+
+    if (!endableStates.includes(game.state)) {
+      throw new Error(
+        `Cannot end game in ${game.state} state. Game must be in progress.`,
+      );
+    }
+
+    const updatedGame = await this.prismaService.client.game.update({
+      where: { id: gameId },
+      data: { state: GameState.COMPLETED },
+    });
+
+    this.logger.log(
+      `Game ${gameId} ended by user ${userId}. Previous state: ${game.state}`,
+    );
+
+    return updatedGame;
   }
 }

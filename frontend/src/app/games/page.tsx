@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { GameList } from '@/components/game/GameList';
-import { createGame, listGames } from '@/lib/api/games';
+import { createGame, listGames, endGame } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListGamesResponse } from '@/lib/api/types';
 
@@ -31,7 +31,13 @@ export default function GamesPage() {
     setError(null);
     try {
       const data = await listGames();
-      setGamesData(data);
+      // Filter out completed games
+      const filteredData = {
+        ...data,
+        games: data.games.filter((game) => game.state !== 'COMPLETED'),
+        total: data.games.filter((game) => game.state !== 'COMPLETED').length,
+      };
+      setGamesData(filteredData);
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
@@ -76,6 +82,26 @@ export default function GamesPage() {
     }
   };
 
+  const handleEndGame = async (gameId: string) => {
+    setError(null);
+    try {
+      await endGame(gameId);
+      // Refresh the games list
+      await fetchGames();
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        if (err.statusCode === 401) {
+          // useRequireAuth will handle the redirect
+          return;
+        }
+        setError(err.message);
+      } else {
+        setError('Failed to end game. Please try again.');
+      }
+      throw err; // Re-throw so GameCard can handle it
+    }
+  };
+
   if (authLoading) {
     return null; // useRequireAuth handles redirect
   }
@@ -89,6 +115,7 @@ export default function GamesPage() {
         error={error}
         onCreateGame={handleCreateGame}
         creatingGame={creatingGame}
+        onEndGame={handleEndGame}
       />
     </div>
   );

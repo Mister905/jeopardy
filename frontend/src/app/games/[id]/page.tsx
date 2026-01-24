@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -12,8 +12,7 @@ import {
   submitClueWager,
   submitFinalJeopardyWager,
   answerFinalJeopardy,
-  startPolling,
-  stopPolling,
+  endGame,
   clearError,
   setSelectedClue,
 } from '@/store/gameSlice';
@@ -36,6 +35,9 @@ export default function GameDetailPage() {
   const { user, loading: authLoading } = useRequireAuth();
   const gameId = params.id as string;
   const dispatch = useAppDispatch();
+  
+  // Track Daily Double flow step: 'intro' | 'wager' | 'question'
+  const [dailyDoubleStep, setDailyDoubleStep] = useState<'intro' | 'wager' | 'question'>('intro');
 
   // Get all state from Redux
   const game = useAppSelector((state) => state.game.game);
@@ -43,9 +45,28 @@ export default function GameDetailPage() {
   const selectedClue = useAppSelector((state) => state.game.selectedClue);
   const actionLoading = useAppSelector((state) => state.game.actionLoading);
   const error = useAppSelector((state) => state.game.error);
-  const isPolling = useAppSelector((state) => state.game.isPolling);
   const loading = useAppSelector((state) => !state.game.game && !state.game.error);
   const reduxGameId = useAppSelector((state) => state.game.gameId);
+
+  // Debug helper: Log Daily Doubles in gameClues (for testing only)
+  useEffect(() => {
+    if (game?.gameClues) {
+      // Use clue.dailyDouble from the API response (which uses isDailyDouble from GameClue)
+      const dailyDoubles = game.gameClues
+        .filter((gc) => gc.clue.dailyDouble && gc.state === 'UNANSWERED')
+        .map((gc) => ({
+          category: gc.clue.category,
+          value: gc.clue.value,
+          gameClueId: gc.id,
+          round: gc.clue.round,
+        }));
+      if (dailyDoubles.length > 0) {
+        const jeopardyCount = dailyDoubles.filter(dd => dd.round === 'JEOPARDY').length;
+        const doubleJeopardyCount = dailyDoubles.filter(dd => dd.round === 'DOUBLE_JEOPARDY').length;
+        console.log(`Daily Doubles available: ${dailyDoubles.length} total (Jeopardy: ${jeopardyCount}, Double Jeopardy: ${doubleJeopardyCount})`, dailyDoubles);
+      }
+    }
+  }, [game?.gameClues]);
   
   // Ensure we always have a gameId - use params first, then Redux, then game.id
   const effectiveGameId = gameId || reduxGameId || game?.id;
@@ -70,27 +91,23 @@ export default function GameDetailPage() {
     }
   }, [authLoading, user, gameId, dispatch]);
 
-  // Start/stop polling based on game state
+  // Auto-start game if it's in PENDING state (only once per game)
+  const [hasAutoStarted, setHasAutoStarted] = useState<string | null>(null);
   useEffect(() => {
-    if (!game || authLoading) return;
-
-    const shouldPoll =
-      game.state === 'ACTIVE' ||
-      game.state === 'FINAL_PENDING' ||
-      game.state === 'FINAL_ACTIVE';
-
-    if (shouldPoll && !isPolling && !actionLoading) {
-      dispatch(startPolling(gameId));
-    } else if (!shouldPoll && isPolling) {
-      dispatch(stopPolling());
+    // Only auto-start if:
+    // 1. Game exists and is PENDING
+    // 2. Not currently loading
+    // 3. Haven't already auto-started this specific game
+    if (game && game.state === 'PENDING' && !actionLoading && !loading && hasAutoStarted !== gameId) {
+      // Small delay to ensure UI is ready, then auto-start
+      const timer = setTimeout(() => {
+        setHasAutoStarted(gameId);
+        dispatch(startGame(gameId));
+      }, 100);
+      return () => clearTimeout(timer);
     }
+  }, [game?.state, game?.id, gameId, actionLoading, loading, hasAutoStarted, dispatch]);
 
-    return () => {
-      if (isPolling) {
-        dispatch(stopPolling());
-      }
-    };
-  }, [game?.state, isPolling, actionLoading, gameId, dispatch, authLoading]);
 
   // Handle 401/403 errors - redirect to login
   useEffect(() => {
@@ -163,7 +180,12 @@ export default function GameDetailPage() {
 
   const handleStartGame = async () => {
     if (!game) return;
-    await dispatch(startGame(gameId));
+    try {
+      await dispatch(startGame(gameId));
+    } catch (err) {
+      console.error('Failed to start game:', err);
+      // Error will be set in Redux state and displayed
+    }
   };
 
   const handleClueClick = (clueId: string, gameClueId: string) => {
@@ -172,12 +194,15 @@ export default function GameDetailPage() {
 
   const handleSubmitWager = async (wager: number) => {
     if (!selectedClue || !game) return;
-    await dispatch(submitClueWager({ gameId, clueId: selectedClue.clueId, wager }));
+    await dispatch(submitClueWager({ gameId, clueId: selectedClue.gameClueId, wager }));
+    // After wager is submitted, move to question step
+    setDailyDoubleStep('question');
   };
 
   const handleAnswerClue = async (correct: boolean) => {
     if (!selectedClue) return;
-    await dispatch(answerClue({ gameId, clueId: selectedClue.clueId, correct }));
+    // Use gameClueId (GameClue ID) not clueId (Clue ID) - backend expects GameClue ID
+    await dispatch(answerClue({ gameId, clueId: selectedClue.gameClueId, correct }));
   };
 
   const handleFinalJeopardyWager = async (wager: number) => {
@@ -190,7 +215,20 @@ export default function GameDetailPage() {
 
   const handleCloseClue = () => {
     dispatch(setSelectedClue(null));
+    setDailyDoubleStep('intro'); // Reset Daily Double flow when closing
   };
+  
+  // Reset Daily Double step when a new Daily Double is selected
+  useEffect(() => {
+    if (selectedClue?.isDailyDouble) {
+      if (selectedClue.state === 'UNANSWERED') {
+        setDailyDoubleStep('intro');
+      } else if (selectedClue.state === 'ANSWERED') {
+        // If wager was already submitted, go directly to question step
+        setDailyDoubleStep('question');
+      }
+    }
+  }, [selectedClue?.gameClueId, selectedClue?.isDailyDouble, selectedClue?.state]);
 
   if (authLoading || loading) {
     return (
@@ -222,15 +260,23 @@ export default function GameDetailPage() {
   // Render based on game state
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Game</h1>
-        <div className="flex items-center gap-4">
-          {isPolling && (
-            <span className="text-sm text-gray-500">Syncing...</span>
-          )}
-          <ScoreDisplay score={game.score} />
+      {/* Score Display - centered with same dimensions as a clue card */}
+      {(game.state === 'ACTIVE' ||
+        game.state === 'FINAL_PENDING' ||
+        game.state === 'FINAL_ACTIVE') && (
+        <div className="w-full flex justify-center">
+          <div 
+            className="h-20 flex items-center justify-center rounded-lg border-2 text-white font-bold text-lg"
+            style={{
+              backgroundColor: '#001AA5',
+              borderColor: '#00188C',
+              width: '159px', // Match the width of a clue card (from user's DOM inspection)
+            }}
+          >
+            <ScoreDisplay score={game.score} className="text-white" />
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="flex items-center justify-between">
@@ -243,12 +289,12 @@ export default function GameDetailPage() {
 
       {/* PENDING State */}
       {game.state === 'PENDING' && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h2 className="text-2xl font-bold mb-4">Ready to Start</h2>
-          {game.finalJeopardy && (
-            <p className="text-gray-600 mb-4">
-              Final Jeopardy Category: {game.finalJeopardy.clue.category}
-            </p>
+        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
+          <h2 className="text-2xl font-bold mb-4 text-white">Ready to Start</h2>
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+              {error}
+            </div>
           )}
           <Button
             onClick={handleStartGame}
@@ -268,6 +314,7 @@ export default function GameDetailPage() {
               board={board.board as JeopardyBoard}
               gameId={gameId}
               onClueClick={handleClueClick}
+              userEmail={user?.email}
             />
           ) : (
             <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -290,7 +337,7 @@ export default function GameDetailPage() {
                     </div>
                   )}
                   {!error && !actionLoading && (
-                    <p className="mt-2 text-sm text-gray-500">
+                    <p className="mt-2 text-sm text-white opacity-80">
                       If the board doesn't load, try refreshing the page.
                     </p>
                   )}
@@ -311,6 +358,7 @@ export default function GameDetailPage() {
               category: game.finalJeopardy.clue.category,
               value: game.finalJeopardy.clue.value,
               question: game.finalJeopardy.clue.question,
+              answer: game.finalJeopardy.clue.answer,
               wager: game.finalJeopardy.wager,
               correct: game.finalJeopardy.correct,
               scoreDelta: game.finalJeopardy.scoreDelta,
@@ -335,9 +383,7 @@ export default function GameDetailPage() {
               category: game.finalJeopardy.clue.category,
               value: game.finalJeopardy.clue.value,
               question: game.finalJeopardy.clue.question,
-              answer: game.finalJeopardy.answeredAt
-                ? game.finalJeopardy.clue.answer
-                : undefined,
+              answer: game.finalJeopardy.clue.answer,
               wager: game.finalJeopardy.wager,
               correct: game.finalJeopardy.correct,
               scoreDelta: game.finalJeopardy.scoreDelta,
@@ -364,7 +410,7 @@ export default function GameDetailPage() {
           {game.finalJeopardy && game.finalJeopardy.answeredAt && (
             <div className="mt-4 p-4 bg-gray-50 rounded">
               <p className="font-semibold">Final Jeopardy:</p>
-              <p className="text-gray-700">{game.finalJeopardy.clue.question}</p>
+              <p style={{ color: '#EAAB66' }}>{game.finalJeopardy.clue.question}</p>
               <p className="text-gray-700 mt-2">
                 Answer: {game.finalJeopardy.clue.answer}
               </p>
@@ -387,47 +433,77 @@ export default function GameDetailPage() {
       {/* Selected Clue Modal/View */}
       {selectedClue && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+          <div className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.95)', borderColor: '#00188C', color: 'white' }}>
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-2xl font-bold">
-                {selectedClue.isDailyDouble ? 'Daily Double' : 'Clue'}
-              </h3>
+              <div className="flex-1">
+                <h3 className="text-2xl font-bold text-center text-white">
+                  {selectedClue.isDailyDouble ? 'Daily Double' : 'Clue'}
+                </h3>
+                {selectedClue.category && (
+                  <p className="text-lg text-white mt-1 text-center opacity-90">{selectedClue.category}</p>
+                )}
+              </div>
               <button
                 onClick={handleCloseClue}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-white hover:opacity-70 text-2xl"
                 aria-label="Close"
               >
                 ×
               </button>
             </div>
 
-            {selectedClue.state === 'UNANSWERED' && selectedClue.isDailyDouble && (
+            {selectedClue.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'intro' && (
+              <div className="space-y-6 text-center">
+                <h2 className="text-4xl font-bold text-blue-600">Daily Double</h2>
+                <Button
+                  onClick={() => setDailyDoubleStep('wager')}
+                  className="w-full"
+                >
+                  Continue
+                </Button>
+              </div>
+            )}
+            
+            {selectedClue.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'wager' && (
+              <WagerInput
+                minWager={5}
+                maxWager={
+                  selectedClue.maxWager ||
+                  (() => {
+                    // Calculate maxWager based on round (same logic as selectClue thunk)
+                    const roundHighestValue =
+                      board?.currentRound === 'DOUBLE_JEOPARDY' ? 2000 : 1000;
+                    return Math.max(game.score, roundHighestValue);
+                  })()
+                }
+                currentScore={game.score}
+                onSubmit={handleSubmitWager}
+                type="daily-double"
+                loading={actionLoading}
+                round={board?.currentRound === 'DOUBLE_JEOPARDY' ? 'DOUBLE_JEOPARDY' : 'JEOPARDY'}
+              />
+            )}
+            
+            {selectedClue.isDailyDouble && (selectedClue.state === 'ANSWERED' || dailyDoubleStep === 'question') && (
               <div>
                 {selectedClue.question ? (
-                  <p className="text-gray-700 mb-4">{selectedClue.question}</p>
+                  <AnswerAdjudication
+                    question={selectedClue.question}
+                    answer={selectedClue.answer}
+                    onAnswer={handleAnswerClue}
+                    loading={actionLoading}
+                    gameClues={game?.gameClues}
+                    gameClueId={selectedClue.gameClueId}
+                    clueId={selectedClue.clueId}
+                    gameId={gameId}
+                  />
                 ) : (
                   <p className="text-gray-700 mb-4">Loading question...</p>
                 )}
-                <WagerInput
-                  minWager={5}
-                  maxWager={
-                    selectedClue.maxWager ||
-                    (() => {
-                      // Calculate maxWager based on round (same logic as selectClue thunk)
-                      const roundHighestValue =
-                        board?.currentRound === 'DOUBLE_JEOPARDY' ? 2000 : 1000;
-                      return Math.max(game.score, roundHighestValue);
-                    })()
-                  }
-                  currentScore={game.score}
-                  onSubmit={handleSubmitWager}
-                  type="daily-double"
-                  loading={actionLoading}
-                />
               </div>
             )}
 
-            {selectedClue.state === 'ANSWERED' && (
+            {selectedClue.state === 'ANSWERED' && !selectedClue.isDailyDouble && (
               <>
                 {console.log('[GamePage] Rendering AnswerAdjudication', {
                   selectedClueState: selectedClue.state,
@@ -461,12 +537,12 @@ export default function GameDetailPage() {
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold mb-2">Question:</h4>
-                  <p className="text-gray-700">{selectedClue.question}</p>
+                  <p style={{ color: '#EAAB66' }}>{selectedClue.question}</p>
                 </div>
                 {selectedClue.answer && (
                   <div>
-                    <h4 className="font-semibold mb-2">Answer:</h4>
-                    <p className="text-gray-700">{selectedClue.answer}</p>
+                    <h4 className="font-semibold mb-2 text-white">Answer:</h4>
+                    <p className="text-white">{selectedClue.answer}</p>
                   </div>
                 )}
                 <Button onClick={handleCloseClue} variant="secondary">
@@ -483,7 +559,7 @@ export default function GameDetailPage() {
                   loading={actionLoading}
                 />
               ) : (
-                <div className="text-gray-600">Loading question...</div>
+                <div className="text-white">Loading question...</div>
               )
             )}
           </div>

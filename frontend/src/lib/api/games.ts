@@ -55,7 +55,7 @@ export async function getGame(gameId: string): Promise<GameResponse> {
  * Start a game by creating Jeopardy and Double Jeopardy boards
  */
 export async function startGame(gameId: string): Promise<StartGameResponse> {
-  return apiPost<StartGameResponse>(`/games/${gameId}/start`);
+  return apiPost<StartGameResponse>(`/games/${gameId}/start`, {});
 }
 
 /**
@@ -134,4 +134,11 @@ export async function answerFinalJeopardy(
     `/games/${gameId}/final-jeopardy/answer`,
     body,
   );
+}
+
+/**
+ * End/abandon a game that is in progress
+ */
+export async function endGame(gameId: string): Promise<GameResponse> {
+  return apiPost<GameResponse>(`/games/${gameId}/end`);
 }

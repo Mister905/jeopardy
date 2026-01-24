@@ -12,6 +12,7 @@ interface GameListProps {
   error: string | null;
   onCreateGame: () => void;
   creatingGame: boolean;
+  onEndGame?: (gameId: string) => Promise<void>;
 }
 
 export function GameList({
@@ -20,6 +21,7 @@ export function GameList({
   error,
   onCreateGame,
   creatingGame,
+  onEndGame,
 }: GameListProps) {
   if (loading) {
     return (
@@ -69,6 +71,7 @@ export function GameList({
             score={game.score}
             createdAt={game.createdAt}
             updatedAt={game.updatedAt}
+            onEndGame={onEndGame}
           />
         ))}
       </div>

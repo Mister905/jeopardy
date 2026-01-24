@@ -22,6 +22,16 @@ export function ClueCard({ clue, onClick, disabled }: ClueCardProps) {
     }).format(value);
   };
 
+  const getButtonStyle = () => {
+    if (isUnanswered) {
+      return {
+        backgroundColor: '#001AA5',
+        borderColor: '#00188C',
+      };
+    }
+    return {};
+  };
+
   return (
     <button
       onClick={onClick}
@@ -32,28 +42,30 @@ export function ClueCard({ clue, onClick, disabled }: ClueCardProps) {
         transition-all
         ${
           isUnanswered
-            ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-700 cursor-pointer'
+            ? 'text-white cursor-pointer'
             : isAnswered
               ? 'bg-yellow-500 text-black border-yellow-600 cursor-pointer'
               : 'bg-gray-300 text-gray-600 border-gray-400 cursor-not-allowed'
         }
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
+      style={getButtonStyle()}
+      onMouseEnter={(e) => {
+        if (isUnanswered && !disabled && !isResolved) {
+          e.currentTarget.style.backgroundColor = '#00188C';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (isUnanswered && !disabled && !isResolved) {
+          e.currentTarget.style.backgroundColor = '#001AA5';
+        }
+      }}
     >
       {isUnanswered ? (
-        <>
-          {formatValue(clue.value)}
-          {clue.dailyDouble && (
-            <span className="ml-2 text-xs">DD</span>
-          )}
-        </>
+        <span style={{ color: '#EAAB66' }}>{formatValue(clue.value)}</span>
       ) : isAnswered ? (
-        <div className="text-center">
-          <div className="text-sm">Wager: {formatValue(clue.wager || 0)}</div>
-          {clue.question && (
-            <div className="text-xs mt-1 line-clamp-2">{clue.question}</div>
-          )}
-        </div>
+        // Show nothing - just the background color
+        null
       ) : (
         <div className="text-center text-xs">
           <div className="line-through">{formatValue(clue.value)}</div>

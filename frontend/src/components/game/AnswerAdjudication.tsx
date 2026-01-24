@@ -182,17 +182,21 @@ export function AnswerAdjudication({
   };
 
   return (
-    <div className="space-y-4 p-6 bg-white border border-gray-200 rounded-lg">
+    <div className="space-y-4 p-6 rounded-lg" style={{ backgroundColor: 'rgba(0, 24, 140, 0.3)', border: '2px solid #00188C' }}>
       <div>
-        <h3 className="text-lg font-semibold mb-2">Question:</h3>
-        <p className="text-gray-800">{question}</p>
+        <h3 className="text-lg font-semibold mb-2 text-white">Question:</h3>
+        <p style={{ color: '#EAAB66' }}>{question}</p>
       </div>
 
       {showAnswer && (
         <div>
-          <h3 className="text-lg font-semibold mb-2">Answer:</h3>
+          <h3 className="text-lg font-semibold mb-2 text-white">Answer:</h3>
           {answer ? (
-            <p className="text-gray-800">{answer}</p>
+            <p className="text-white">
+              {answer.charAt(0) === answer.charAt(0).toUpperCase()
+                ? answer
+                : answer.charAt(0).toUpperCase() + answer.slice(1)}
+            </p>
           ) : (
             <p className="text-gray-500 italic">Loading answer...</p>
           )}

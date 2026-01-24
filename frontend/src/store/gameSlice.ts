@@ -7,6 +7,7 @@ import {
   submitClueWager as apiSubmitClueWager,
   submitFinalJeopardyWager as apiSubmitFinalJeopardyWager,
   answerFinalJeopardy as apiAnswerFinalJeopardy,
+  endGame as apiEndGame,
 } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import type {
@@ -23,6 +24,7 @@ export interface SelectedClue {
   isDailyDouble: boolean;
   state: string;
   maxWager?: number;
+  category?: string;
 }
 
 interface GameState {
@@ -97,16 +99,22 @@ export const startGame = createAsyncThunk(
   'game/startGame',
   async (gameId: string, { dispatch, rejectWithValue }) => {
     try {
+      console.log('[startGame] Starting game:', gameId);
       await apiStartGame(gameId);
+      console.log('[startGame] Game started successfully, fetching game data...');
       await dispatch(fetchGameData(gameId));
+      console.log('[startGame] Game data fetched successfully');
       return;
     } catch (err) {
+      console.error('[startGame] Error starting game:', err);
       if (err instanceof ApiClientError) {
+        console.error('[startGame] ApiClientError:', err.statusCode, err.message);
         return rejectWithValue({
           error: err.message,
           statusCode: err.statusCode,
         });
       }
+      console.error('[startGame] Unknown error:', err);
       return rejectWithValue({
         error: 'Failed to start game. Please try again.',
         statusCode: 500,
@@ -148,8 +156,9 @@ export const selectClue = createAsyncThunk(
             gameClueId: clue.gameClueId,
             question: clue.question || '',
             answer: clue.answer,
-            isDailyDouble: clue.dailyDouble,
+            isDailyDouble: clue.dailyDouble, // May be false for UNANSWERED clues (intentionally hidden)
             state: clue.state,
+            category: category.name,
           };
           break;
         }
@@ -159,8 +168,8 @@ export const selectClue = createAsyncThunk(
         return rejectWithValue({ error: 'Clue not found' });
       }
 
-      // For UNANSWERED clues, fetch full game data to get the question
-      // (board data doesn't include question for UNANSWERED clues)
+      // For UNANSWERED clues, fetch full game data to get the question and true Daily Double status
+      // (board data doesn't include question for UNANSWERED clues, and hides Daily Double status)
       if (clueData.state === 'UNANSWERED' && (!clueData.question || clueData.question.trim() === '')) {
         await dispatch(fetchGameData(game.id));
         const updatedState = getState() as { game: GameState };
@@ -169,9 +178,19 @@ export const selectClue = createAsyncThunk(
           const gameClue = updatedGame.gameClues?.find(
             (gc) => gc.id === gameClueId,
           );
-          if (gameClue && gameClue.clue.question) {
-            clueData.question = gameClue.clue.question;
+          if (gameClue) {
+            if (gameClue.clue.question) {
+              clueData.question = gameClue.clue.question;
+            }
+            // Check the true Daily Double status from gameClues (board hides it for UNANSWERED)
+            clueData.isDailyDouble = gameClue.clue.dailyDouble;
           }
+        }
+      } else if (clueData.state === 'UNANSWERED' && game.gameClues) {
+        // Even if question is already available, check Daily Double status from gameClues
+        const gameClue = game.gameClues.find((gc) => gc.id === gameClueId);
+        if (gameClue) {
+          clueData.isDailyDouble = gameClue.clue.dailyDouble;
         }
       }
 
@@ -277,6 +296,7 @@ export const submitClueWager = createAsyncThunk(
                   answer: answer, // Use answer from gameClues
                   state: clue.state,
                   maxWager: response.maxWager,
+                  category: category.name, // Preserve category
                 },
               };
             }
@@ -293,6 +313,7 @@ export const submitClueWager = createAsyncThunk(
             // Ensure gameClueId and clueId are preserved
             gameClueId: selectedClue.gameClueId,
             clueId: selectedClue.clueId,
+            category: selectedClue.category, // Preserve category
           },
         };
       }
@@ -359,6 +380,30 @@ export const answerFinalJeopardy = createAsyncThunk(
       }
       return rejectWithValue({
         error: 'Failed to submit answer. Please try again.',
+        statusCode: 500,
+      });
+    }
+  },
+);
+
+// Thunk to end/abandon a game
+export const endGame = createAsyncThunk(
+  'game/endGame',
+  async (gameId: string, { dispatch, rejectWithValue }) => {
+    try {
+      await apiEndGame(gameId);
+      // Refresh game data to reflect the new state
+      await dispatch(fetchGameData(gameId));
+      return gameId;
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        return rejectWithValue({
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+      }
+      return rejectWithValue({
+        error: 'Failed to end game. Please try again.',
         statusCode: 500,
       });
     }
@@ -730,6 +775,25 @@ const gameSlice = createSlice({
         state.error = null; // Clear error on success
       })
       .addCase(answerFinalJeopardy.rejected, (state, action) => {
+        state.actionLoading = false;
+        const payload = action.payload as { error?: string; statusCode?: number };
+        if (payload?.error) {
+          state.error = payload.error;
+        }
+      });
+
+    // endGame
+    builder
+      .addCase(endGame.pending, (state) => {
+        state.actionLoading = true;
+        state.error = null;
+      })
+      .addCase(endGame.fulfilled, (state) => {
+        state.actionLoading = false;
+        state.error = null;
+        // Game state will be updated by fetchGameData
+      })
+      .addCase(endGame.rejected, (state, action) => {
         state.actionLoading = false;
         const payload = action.payload as { error?: string; statusCode?: number };
         if (payload?.error) {

@@ -10,6 +10,7 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
+  Delete,
 } from '@nestjs/common';
 import { GameService } from './game.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -469,7 +470,14 @@ export class GameController {
           value: gc.clue.value,
           question: gc.clue.question,
           answer: gc.clue.answer,
-          dailyDouble: gc.clue.dailyDouble,
+          // Daily Double status: Use isDailyDouble from GameClue as the source of truth for this game
+          // The Clue table's dailyDouble field indicates if a clue CAN be a Daily Double,
+          // but isDailyDouble in GameClue indicates if it IS a Daily Double in this specific game.
+          // This ensures we show exactly 1 Daily Double for Jeopardy and 2 for Double Jeopardy
+          // for new games, even if the database has more Daily Doubles in the selected categories.
+          // NOTE: Games created before the isDailyDouble field was added will have isDailyDouble: false
+          // for all clues, so they should create a new game to get the correct Daily Double count.
+          dailyDouble: gc.isDailyDouble,
           createdAt: gc.clue.createdAt.toISOString(),
         },
       })),
@@ -495,5 +503,31 @@ export class GameController {
           }
         : undefined,
     };
+  }
+
+  /**
+   * POST /games/:id/end
+   * End/abandon a game that is in progress
+   */
+  @Post(':id/end')
+  @HttpCode(HttpStatus.OK)
+  async endGame(
+    @Param('id') gameId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<GameResponseDto> {
+    this.logger.log(`Ending game ${gameId} for user: ${user.userId}`);
+
+    // Verify ownership before proceeding
+    const game = await this.verifyGameOwnership(gameId, user.userId);
+
+    try {
+      const updatedGame = await this.gameService.endGame(gameId, user.userId);
+      return this.mapGameToResponseDto(updatedGame);
+    } catch (error) {
+      this.logger.error(
+        `Failed to end game: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      this.handleServiceError(error, gameId, user.userId);
+    }
   }
 }

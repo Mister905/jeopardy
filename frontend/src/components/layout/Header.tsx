@@ -28,10 +28,10 @@ export function Header() {
   };
 
   return (
-    <header className="bg-gray-800 text-white shadow-lg">
+    <header className="text-white shadow-lg" style={{ backgroundColor: '#001AA5' }}>
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link href="/" className="text-2xl font-bold">
-          Jeopardy
+          Trivia Master
         </Link>
         <nav className="flex items-center gap-4">
           {loading ? (
@@ -42,9 +42,8 @@ export function Header() {
                 href="/games"
                 className="hover:text-gray-300 transition-colors"
               >
-                My Games
+                Dashboard
               </Link>
-              <span className="text-gray-400">{user.email}</span>
               <Button variant="secondary" onClick={handleLogout} disabled={signingOut}>
                 {signingOut ? 'Logging out...' : 'Logout'}
               </Button>

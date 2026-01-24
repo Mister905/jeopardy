@@ -69,6 +69,10 @@ model GameClue {
 
   state       ClueState  @default(UNANSWERED)
 
+  // Track if this clue is a Daily Double for this specific game
+  // (handles both database Daily Doubles and dynamically assigned ones)
+  isDailyDouble Boolean  @default(false)
+
   // Only populated for Daily Doubles
   wager       Int?
 

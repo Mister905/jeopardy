@@ -36,8 +36,8 @@ export function FinalJeopardyView({
       </div>
 
       {!hasWager ? (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4">Enter your wager:</h3>
+        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
+          <h3 className="text-lg font-semibold mb-4 text-white">Enter your wager:</h3>
           <WagerInput
             minWager={0}
             maxWager={currentScore}
@@ -53,20 +53,22 @@ export function FinalJeopardyView({
           answer={clue.answer}
           onAnswer={onAnswerSubmit}
           loading={loading}
+          clueId={clue.clueId}
+          gameId={gameId}
         />
       ) : (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
           <div className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold mb-2">Question:</h3>
-              <p className="text-gray-800">{clue.question}</p>
+              <h3 className="text-lg font-semibold mb-2 text-white">Question:</h3>
+              <p style={{ color: '#EAAB66' }}>{clue.question}</p>
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-2">Answer:</h3>
-              <p className="text-gray-800">{clue.answer}</p>
+              <h3 className="text-lg font-semibold mb-2 text-white">Answer:</h3>
+              <p className="text-white">{clue.answer}</p>
             </div>
-            <div className="pt-4 border-t border-gray-200">
-              <p className="text-sm text-gray-600">
+            <div className="pt-4 border-t" style={{ borderColor: '#00188C' }}>
+              <p className="text-sm text-white opacity-80">
                 Wager: ${clue.wager} |{' '}
                 {clue.correct ? 'Correct' : 'Incorrect'} | Score Change:{' '}
                 {clue.scoreDelta !== null

@@ -17,8 +17,8 @@ import type {
 /**
  * Create a new game for the authenticated user
  */
-export async function createGame(): Promise<GameResponse> {
-  return apiPost<GameResponse>('/games');
+export async function createGame(username?: string): Promise<GameResponse> {
+  return apiPost<GameResponse>('/games', username ? { username } : {});
 }
 
 /**

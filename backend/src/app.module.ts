@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { GameModule } from './game/game.module';
 import { AuthModule } from './auth/auth.module';
+import { UserModule } from './user/user.module';
 import { ParsingModule } from './data/parsing/parsing.module';
 import { IngestionModule } from './data/ingestion/ingestion.module';
 
@@ -16,6 +17,7 @@ import { IngestionModule } from './data/ingestion/ingestion.module';
     PrismaModule,
     AuthModule,
     GameModule,
+    UserModule,
     ParsingModule,
     IngestionModule,
   ],

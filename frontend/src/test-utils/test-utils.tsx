@@ -1,14 +1,15 @@
 import React, { ReactElement } from 'react';
 import { render, RenderOptions } from '@testing-library/react';
-import { configureStore, PreloadedState } from '@reduxjs/toolkit';
+import { configureStore } from '@reduxjs/toolkit';
 import { Provider } from 'react-redux';
 import { RootState, store as realStore } from '@/store/store';
 import gameReducer from '@/store/gameSlice';
-import type {
-  GameResponse,
-  BoardResponse,
-  SelectedClue,
-} from '@/store/gameSlice';
+import authReducer from '@/store/authSlice';
+import type { GameResponse, BoardResponse } from '@/lib/api/types';
+import type { SelectedClue } from '@/store/gameSlice';
+
+// Define PreloadedState type ourselves since it's not exported in this version
+type PreloadedState<T> = Partial<T>;
 
 interface ExtendedRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   preloadedState?: PreloadedState<RootState>;
@@ -19,25 +20,27 @@ export function renderWithProviders(
   ui: ReactElement,
   {
     preloadedState = {},
-    store = configureStore({
-      reducer: { game: gameReducer },
-      preloadedState,
-    }),
+    store,
     ...renderOptions
   }: ExtendedRenderOptions = {},
 ) {
+  const testStore =
+    store ||
+    (configureStore({
+      reducer: { game: gameReducer, auth: authReducer },
+    }) as any);
+
   function Wrapper({ children }: { children: React.ReactNode }) {
-    return <Provider store={store}>{children}</Provider>;
+    return <Provider store={testStore}>{children}</Provider>;
   }
 
-  return { store, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
+  return { store: testStore, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
 }
 
 export function createMockStore(preloadedState?: PreloadedState<RootState>) {
   return configureStore({
-    reducer: { game: gameReducer },
-    preloadedState: preloadedState || {},
-  });
+    reducer: { game: gameReducer, auth: authReducer },
+  }) as any;
 }
 
 export function createMockGameState(

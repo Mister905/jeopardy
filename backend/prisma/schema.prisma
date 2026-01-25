@@ -15,9 +15,35 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
+  username  String
   games     Game[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Statistics fields
+  totalGamesPlayed                        Int     @default(0)
+  averageScore                            Float   @default(0)
+  bestScore                               Int?
+  worstScore                              Int?
+  totalWinnings                           Int     @default(0)
+  totalCorrectAnswers                     Int     @default(0)
+  totalIncorrectAnswers                   Int     @default(0)
+  jeopardyCorrect                         Int     @default(0)
+  jeopardyIncorrect                       Int     @default(0)
+  doubleJeopardyCorrect                  Int     @default(0)
+  doubleJeopardyIncorrect                Int     @default(0)
+  finalJeopardyCorrect                   Int     @default(0)
+  finalJeopardyIncorrect                 Int     @default(0)
+  dailyDoubleCorrect                      Int     @default(0)
+  dailyDoubleIncorrect                    Int     @default(0)
+  currentCorrectStreak                    Int     @default(0)
+  longestCorrectStreak                    Int     @default(0)
+  currentIncorrectStreak                  Int     @default(0)
+  longestIncorrectStreak                  Int     @default(0)
+  largestSuccessfulDailyDoubleWager      Int?
+  largestSuccessfulFinalJeopardyWager    Int?
+  largestUnsuccessfulDailyDoubleWager     Int?
+  largestUnsuccessfulFinalJeopardyWager  Int?
 }
 
 model Game {

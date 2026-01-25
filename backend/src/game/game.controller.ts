@@ -115,7 +115,11 @@ export class GameController {
     this.logger.log(`Creating game for user: ${user.userId}`);
 
     try {
-      const result = await this.gameService.createGame(user.userId);
+      const result = await this.gameService.createGame(
+        user.userId,
+        user.email, // Optional - service will handle if missing
+        dto.username,
+      );
       // CreateGameResult.game has finalJeopardy with clue, but no gameClues
       // Map it to match GameWithRelations structure
       const gameData = {

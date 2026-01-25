@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UserService } from '../user/user.service';
 import {
   GameState,
   Round,
@@ -15,19 +16,49 @@ import { CreateGameResult } from './types';
 export class GameService {
   private readonly logger = new Logger(GameService.name);
 
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly userService: UserService,
+  ) {}
 
   /**
    * Create a new game with a Final Jeopardy clue
    * @param userId - The authenticated user creating the game
+   * @param email - The user's email address (optional, will be fetched from existing user if missing)
+   * @param username - Optional username (required for new users)
    * @returns Created game with associated Final Jeopardy clue
    * @throws Error if userId is invalid, no clues available, or database operation fails
    */
-  async createGame(userId: string): Promise<CreateGameResult> {
+  async createGame(
+    userId: string,
+    email?: string,
+    username?: string,
+  ): Promise<CreateGameResult> {
     this.logger.log(`Creating game for user: ${userId}`);
 
     // Step 1: Validate User
     this.validateUserId(userId);
+
+    // Step 1.5: Ensure User exists (create if needed)
+    // If email is not provided, try to get it from existing user record
+    let userEmail = email;
+    if (!userEmail || userEmail.trim().length === 0) {
+      const existingUser = await this.prismaService.client.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      if (existingUser) {
+        userEmail = existingUser.email;
+        this.logger.debug(`Retrieved email from existing user record: ${userEmail}`);
+      } else {
+        // Email is required for new users
+        throw new Error(
+          'Email is required for user creation. Please ensure your authentication token includes an email claim.',
+        );
+      }
+    }
+
+    await this.userService.ensureUserExists(userId, userEmail, username);
 
     // Step 2: Select Final Jeopardy Clue
     const selectedClue = await this.selectFinalJeopardyClue();
@@ -488,12 +519,29 @@ export class GameService {
           scoreDelta,
           answeredAt: new Date(),
         },
+        include: { clue: true },
       }),
       this.prismaService.client.game.update({
         where: { id: gameId },
         data: { score: newScore },
       }),
     ]);
+
+    // Update user statistics for clue resolution
+    await this.userService.updateUserStatsOnClueResolved(
+      userId,
+      updatedGameClue,
+      correct,
+    );
+
+    // Update Daily Double wager stats if applicable
+    if (isDailyDouble && gameClue.wager !== null) {
+      await this.userService.updateUserStatsOnDailyDoubleWager(
+        userId,
+        gameClue.wager,
+        correct,
+      );
+    }
 
     // Check if all clues in both Jeopardy and Double Jeopardy rounds are resolved
     const allGameClues = await this.prismaService.client.gameClue.findMany({
@@ -716,6 +764,14 @@ export class GameService {
         return { game: updatedGame, finalJeopardy };
       },
     );
+
+    // Update user statistics for Final Jeopardy and game completion
+    await this.userService.updateUserStatsOnFinalJeopardyWager(
+      userId,
+      wager,
+      correct,
+    );
+    await this.userService.updateUserStatsOnGameComplete(userId, finalScore);
 
     return {
       game: result.game,

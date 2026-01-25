@@ -241,7 +241,7 @@ export default function GameDetailPage() {
                   )}
                   {!error && !actionLoading && (
                     <p className="mt-2 text-sm text-white opacity-80">
-                      If the board doesn't load, try refreshing the page.
+                      If the board doesn&apos;t load, try refreshing the page.
                     </p>
                   )}
                 </div>
@@ -343,7 +343,13 @@ export default function GameDetailPage() {
             <Button
               onClick={async () => {
                 try {
-                  const newGame = await createGame();
+                  // Retrieve username from localStorage if available
+                  const username = localStorage.getItem('pendingUsername') || undefined;
+                  const newGame = await createGame(username);
+                  // Clear pending username after successful game creation
+                  if (username) {
+                    localStorage.removeItem('pendingUsername');
+                  }
                   router.push(`/games/${newGame.id}`);
                 } catch (err) {
                   console.error('Failed to create new game:', err);

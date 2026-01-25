@@ -51,7 +51,13 @@ export default function HomePage() {
     setCreatingGame(true);
     setError(null);
     try {
-      const newGame = await createGame();
+      // Retrieve username from localStorage if available
+      const username = localStorage.getItem('pendingUsername') || undefined;
+      const newGame = await createGame(username);
+      // Clear pending username after successful game creation
+      if (username) {
+        localStorage.removeItem('pendingUsername');
+      }
       router.push(`/games/${newGame.id}`);
     } catch (err) {
       if (err instanceof ApiClientError) {

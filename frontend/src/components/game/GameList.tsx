@@ -50,12 +50,25 @@ export function GameList({
 
   if (!data || activeGames.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-600 mb-4">No games yet.</p>
+        <div className="text-center py-12">
         <button
           onClick={onCreateGame}
           disabled={creatingGame}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
+          style={{
+            backgroundColor: '#001AA5',
+            borderColor: '#3F3A3E',
+          }}
+          onMouseEnter={(e) => {
+            if (!creatingGame) {
+              e.currentTarget.style.backgroundColor = '#00188C';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!creatingGame) {
+              e.currentTarget.style.backgroundColor = '#001AA5';
+            }
+          }}
         >
           {creatingGame ? 'Creating...' : 'Create New Game'}
         </button>

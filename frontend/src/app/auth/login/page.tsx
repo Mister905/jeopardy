@@ -19,6 +19,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 export default function LoginPage() {
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -70,9 +71,21 @@ export default function LoginPage() {
       return false;
     }
 
-    if (mode === 'signUp' && password !== confirmPassword) {
-      setValidationError('Passwords do not match.');
-      return false;
+    if (mode === 'signUp') {
+      if (!username || username.trim().length === 0) {
+        setValidationError('Username is required.');
+        return false;
+      }
+
+      if (username.length < 3 || username.length > 50) {
+        setValidationError('Username must be between 3 and 50 characters.');
+        return false;
+      }
+
+      if (password !== confirmPassword) {
+        setValidationError('Passwords do not match.');
+        return false;
+      }
     }
 
     return true;
@@ -90,8 +103,12 @@ export default function LoginPage() {
     dispatch(clearSignUpSuccess());
 
     if (mode === 'signUp') {
-      const result = await dispatch(signUpUser({ email, password }));
+      const result = await dispatch(signUpUser({ email, password, username }));
       if (signUpUser.fulfilled.match(result)) {
+        // Store username in localStorage for use when creating first game
+        if (username) {
+          localStorage.setItem('pendingUsername', username);
+        }
         // Success - message is shown via signUpMessage
         // If email verification not required, user is logged in and will redirect via onAuthStateChange
       }
@@ -107,6 +124,7 @@ export default function LoginPage() {
   const handleModeToggle = () => {
     setMode(mode === 'signIn' ? 'signUp' : 'signIn');
     setEmail('');
+    setUsername('');
     setPassword('');
     setConfirmPassword('');
     setValidationError(null);
@@ -175,6 +193,33 @@ export default function LoginPage() {
                 placeholder="your@email.com"
               />
             </div>
+
+            {mode === 'signUp' && (
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-white mb-1">
+                  Username
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  disabled={loading}
+                  minLength={3}
+                  maxLength={50}
+                  className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                  style={{
+                    border: '2px solid #3F3A3E',
+                    backgroundColor: 'white',
+                  }}
+                  placeholder="Choose a username"
+                />
+                <p className="mt-1 text-xs text-white opacity-70">
+                  Username must be between 3 and 50 characters
+                </p>
+              </div>
+            )}
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-white mb-1">

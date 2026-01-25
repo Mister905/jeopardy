@@ -114,12 +114,6 @@ export function WagerInput({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label
-          htmlFor="wager"
-          className="block text-sm font-medium text-gray-700 mb-2"
-        >
-          Enter your wager
-        </label>
         <input
           id="wager"
           type="number"
@@ -127,14 +121,18 @@ export function WagerInput({
           max={maxWager}
           value={wager}
           onChange={(e) => handleWagerChange(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+          style={{
+            border: '2px solid #3F3A3E',
+            backgroundColor: 'white',
+          }}
           disabled={loading}
         />
       </div>
       {error && (
         <div className="text-red-600 text-sm">{error}</div>
       )}
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-6">
         {dailyDoubleButtonInfo && (
           <Button
             type="button"
@@ -144,6 +142,7 @@ export function WagerInput({
             }}
             disabled={loading}
             variant="secondary"
+            className="flex-1"
           >
             {dailyDoubleButtonInfo.text}
           </Button>
@@ -157,6 +156,7 @@ export function WagerInput({
             }}
             disabled={loading}
             variant="secondary"
+            className="flex-1"
           >
             {finalJeopardyButtonInfo.text}
           </Button>

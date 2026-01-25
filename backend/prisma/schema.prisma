@@ -21,15 +21,15 @@ model User {
 }
 
 model Game {
-  id            String        @id @default(cuid())
-  user          User          @relation(fields: [userId], references: [id])
-  userId        String
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
 
-  state         GameState     @default(PENDING)
-  score         Int           @default(0)
+  state GameState @default(PENDING)
+  score Int       @default(0)
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   gameClues     GameClue[]
   finalJeopardy FinalJeopardy?
@@ -37,85 +37,82 @@ model Game {
 }
 
 model Clue {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
   category    String
   round       Round
   value       Int
   question    String
   answer      String
-  dailyDouble Boolean  @default(false)
+  dailyDouble Boolean @default(false)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // IMPORTANT:
   // Clue records are immutable after creation.
   // No updates to question, answer, category, round, value, or dailyDouble.
-  gameClues      GameClue[]      @relation("GameClueClue")
-  finalJeopardy  FinalJeopardy[] @relation("FinalJeopardyClue")
+  gameClues     GameClue[]      @relation("GameClueClue")
+  finalJeopardy FinalJeopardy[] @relation("FinalJeopardyClue")
 
   // Index for efficient duplicate detection during ingestion
   @@index([round, category, question, answer])
 }
 
 model GameClue {
-  id          String     @id @default(cuid())
+  id String @id @default(cuid())
 
-  game        Game       @relation(fields: [gameId], references: [id])
-  gameId      String
+  game   Game   @relation(fields: [gameId], references: [id])
+  gameId String
 
-  clue        Clue       @relation("GameClueClue", fields: [clueId], references: [id])
-  clueId      String
+  clue   Clue   @relation("GameClueClue", fields: [clueId], references: [id])
+  clueId String
 
-  state       ClueState  @default(UNANSWERED)
-
-  // Track if this clue is a Daily Double for this specific game
-  // (handles both database Daily Doubles and dynamically assigned ones)
-  isDailyDouble Boolean  @default(false)
+  state         ClueState @default(UNANSWERED)
+  isDailyDouble Boolean   @default(false)
 
   // Only populated for Daily Doubles
-  wager       Int?
+  wager Int?
 
   // Score delta resulting from this clue resolution
-  scoreDelta  Int?
+  scoreDelta Int?
 
-  answeredAt  DateTime?
+  answeredAt DateTime?
 }
 
 model FinalJeopardy {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  game        Game     @relation(fields: [gameId], references: [id])
-  gameId      String   @unique
+  game   Game   @relation(fields: [gameId], references: [id])
+  gameId String @unique
 
-  clue        Clue     @relation("FinalJeopardyClue", fields: [clueId], references: [id])
-  clueId      String
+  clue   Clue   @relation("FinalJeopardyClue", fields: [clueId], references: [id])
+  clueId String
 
-  wager       Int
-  correct     Boolean?
-  scoreDelta  Int?
-  answeredAt  DateTime?
+  wager      Int
+  correct    Boolean?
+  scoreDelta Int?
+  answeredAt DateTime?
 }
 
 model GameAudit {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  game        Game     @relation(fields: [gameId], references: [id])
-  gameId      String
+  game   Game   @relation(fields: [gameId], references: [id])
+  gameId String
 
-  action      String
-  details     Json?
+  action  String
+  details Json?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 enum GameState {
-  PENDING          // Created, board not yet played
-  ACTIVE           // Jeopardy / Double Jeopardy in progress
-  FINAL_PENDING    // Eligible for Final Jeopardy, wager not submitted
-  FINAL_ACTIVE     // Final Jeopardy in progress
-  ELIMINATED       // ≤ $0 after Double Jeopardy
-  COMPLETED        // Game finished
+  PENDING // Created, board not yet played
+  ACTIVE // Jeopardy / Double Jeopardy in progress
+  FINAL_PENDING // Eligible for Final Jeopardy, wager not submitted
+  FINAL_ACTIVE // Final Jeopardy in progress
+  ELIMINATED // ≤ $0 after Double Jeopardy
+  COMPLETED // Game finished
 }
 
 enum ClueState {

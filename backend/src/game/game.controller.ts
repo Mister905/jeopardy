@@ -9,8 +9,6 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-  BadRequestException,
-  Delete,
 } from '@nestjs/common';
 import { GameService } from './game.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -117,7 +115,7 @@ export class GameController {
     this.logger.log(`Creating game for user: ${user.userId}`);
 
     try {
-      const result = await this.gameService.createGame(user.userId, user.email);
+      const result = await this.gameService.createGame(user.userId);
       // CreateGameResult.game has finalJeopardy with clue, but no gameClues
       // Map it to match GameWithRelations structure
       const gameData = {
@@ -231,10 +229,15 @@ export class GameController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('round') round?: Round,
   ): Promise<BoardResponseDto> {
-    const board = await this.gameService.getBoard(gameId, user.userId, round);
+    const boardData = await this.gameService.getBoard(gameId, user.userId, round);
     
-    // The service already returns the correct format, just cast it
-    return board as BoardResponseDto;
+    return {
+      gameId: boardData.gameId,
+      currentRound: boardData.currentRound,
+      gameState: boardData.gameState,
+      score: boardData.score,
+      board: boardData.board,
+    };
   }
 
   /**
@@ -280,10 +283,8 @@ export class GameController {
       };
     } catch (error) {
       this.logger.error(`Failed to answer clue: ${error instanceof Error ? error.message : String(error)}`);
-      // ClueNotFoundException is already handled by handleServiceError
-      // Check for "already resolved" error and convert to BadRequest
-      if (error instanceof Error && error.message.includes('already been resolved')) {
-        throw new BadRequestException(error.message);
+      if (error instanceof Error && error.message.includes('Clue not found')) {
+        throw new ClueNotFoundException(clueId);
       }
       this.handleServiceError(error, gameId, user.userId);
     }
@@ -470,14 +471,7 @@ export class GameController {
           value: gc.clue.value,
           question: gc.clue.question,
           answer: gc.clue.answer,
-          // Daily Double status: Use isDailyDouble from GameClue as the source of truth for this game
-          // The Clue table's dailyDouble field indicates if a clue CAN be a Daily Double,
-          // but isDailyDouble in GameClue indicates if it IS a Daily Double in this specific game.
-          // This ensures we show exactly 1 Daily Double for Jeopardy and 2 for Double Jeopardy
-          // for new games, even if the database has more Daily Doubles in the selected categories.
-          // NOTE: Games created before the isDailyDouble field was added will have isDailyDouble: false
-          // for all clues, so they should create a new game to get the correct Daily Double count.
-          dailyDouble: gc.isDailyDouble,
+          dailyDouble: gc.clue.dailyDouble,
           createdAt: gc.clue.createdAt.toISOString(),
         },
       })),
@@ -503,31 +497,5 @@ export class GameController {
           }
         : undefined,
     };
-  }
-
-  /**
-   * POST /games/:id/end
-   * End/abandon a game that is in progress
-   */
-  @Post(':id/end')
-  @HttpCode(HttpStatus.OK)
-  async endGame(
-    @Param('id') gameId: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<GameResponseDto> {
-    this.logger.log(`Ending game ${gameId} for user: ${user.userId}`);
-
-    // Verify ownership before proceeding
-    const game = await this.verifyGameOwnership(gameId, user.userId);
-
-    try {
-      const updatedGame = await this.gameService.endGame(gameId, user.userId);
-      return this.mapGameToResponseDto(updatedGame);
-    } catch (error) {
-      this.logger.error(
-        `Failed to end game: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.handleServiceError(error, gameId, user.userId);
-    }
   }
 }

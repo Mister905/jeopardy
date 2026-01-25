@@ -7,7 +7,6 @@ import {
   submitClueWager as apiSubmitClueWager,
   submitFinalJeopardyWager as apiSubmitFinalJeopardyWager,
   answerFinalJeopardy as apiAnswerFinalJeopardy,
-  endGame as apiEndGame,
 } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import type {
@@ -58,26 +57,8 @@ export const fetchGameData = createAsyncThunk(
     try {
       const [gameData, boardData] = await Promise.all([
         getGame(gameId),
-        getBoard(gameId).catch((boardErr) => {
-          // If game is ACTIVE, board should exist - log the error
-          // We'll check the game state after fetching to determine if this is a problem
-          console.warn('Board fetch failed:', boardErr);
-          return null;
-        }),
+        getBoard(gameId).catch(() => null), // Board may not exist for PENDING games
       ]);
-      
-      // Verify gameClues are included (they should always be for ACTIVE games)
-      if (gameData.state === 'ACTIVE' && (!gameData.gameClues || gameData.gameClues.length === 0)) {
-        console.warn('Game is ACTIVE but gameClues are missing or empty');
-      }
-      
-      // If game is ACTIVE but board is missing, this is an error condition
-      if (gameData.state === 'ACTIVE' && !boardData) {
-        console.error('Game is ACTIVE but board is missing');
-        // Don't reject - allow the game to render with a loading state
-        // The UI will show a loading message for the board
-      }
-      
       return { game: gameData, board: boardData };
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -99,22 +80,16 @@ export const startGame = createAsyncThunk(
   'game/startGame',
   async (gameId: string, { dispatch, rejectWithValue }) => {
     try {
-      console.log('[startGame] Starting game:', gameId);
       await apiStartGame(gameId);
-      console.log('[startGame] Game started successfully, fetching game data...');
       await dispatch(fetchGameData(gameId));
-      console.log('[startGame] Game data fetched successfully');
       return;
     } catch (err) {
-      console.error('[startGame] Error starting game:', err);
       if (err instanceof ApiClientError) {
-        console.error('[startGame] ApiClientError:', err.statusCode, err.message);
         return rejectWithValue({
           error: err.message,
           statusCode: err.statusCode,
         });
       }
-      console.error('[startGame] Unknown error:', err);
       return rejectWithValue({
         error: 'Failed to start game. Please try again.',
         statusCode: 500,
@@ -156,7 +131,7 @@ export const selectClue = createAsyncThunk(
             gameClueId: clue.gameClueId,
             question: clue.question || '',
             answer: clue.answer,
-            isDailyDouble: clue.dailyDouble, // May be false for UNANSWERED clues (intentionally hidden)
+            isDailyDouble: clue.dailyDouble,
             state: clue.state,
             category: category.name,
           };
@@ -168,9 +143,8 @@ export const selectClue = createAsyncThunk(
         return rejectWithValue({ error: 'Clue not found' });
       }
 
-      // For UNANSWERED clues, fetch full game data to get the question and true Daily Double status
-      // (board data doesn't include question for UNANSWERED clues, and hides Daily Double status)
-      if (clueData.state === 'UNANSWERED' && (!clueData.question || clueData.question.trim() === '')) {
+      // If clue is UNANSWERED and we don't have question, fetch full game data
+      if (clueData.state === 'UNANSWERED' && !clueData.question) {
         await dispatch(fetchGameData(game.id));
         const updatedState = getState() as { game: GameState };
         const updatedGame = updatedState.game.game;
@@ -179,34 +153,7 @@ export const selectClue = createAsyncThunk(
             (gc) => gc.id === gameClueId,
           );
           if (gameClue) {
-            if (gameClue.clue.question) {
-              clueData.question = gameClue.clue.question;
-            }
-            // Check the true Daily Double status from gameClues (board hides it for UNANSWERED)
-            clueData.isDailyDouble = gameClue.clue.dailyDouble;
-          }
-        }
-      } else if (clueData.state === 'UNANSWERED' && game.gameClues) {
-        // Even if question is already available, check Daily Double status from gameClues
-        const gameClue = game.gameClues.find((gc) => gc.id === gameClueId);
-        if (gameClue) {
-          clueData.isDailyDouble = gameClue.clue.dailyDouble;
-        }
-      }
-
-      // For ANSWERED clues, fetch full game data to get the answer
-      // (board data doesn't include answer for ANSWERED clues, only for RESOLVED)
-      // This works exactly like UNANSWERED clues fetching the question
-      if (clueData.state === 'ANSWERED' && !clueData.answer) {
-        await dispatch(fetchGameData(game.id));
-        const updatedState = getState() as { game: GameState };
-        const updatedGame = updatedState.game.game;
-        if (updatedGame) {
-          const gameClue = updatedGame.gameClues?.find(
-            (gc) => gc.id === gameClueId,
-          );
-          if (gameClue && gameClue.clue.answer) {
-            clueData.answer = gameClue.clue.answer;
+            clueData.question = gameClue.clue.question;
           }
         }
       }
@@ -266,54 +213,34 @@ export const submitClueWager = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       
       // Update selected clue with maxWager from backend and ANSWERED state
-      // Extract answer from gameClues exactly like we extract question for UNANSWERED clues
       const state = getState() as { game: GameState };
-      const { board, selectedClue, game } = state.game;
+      const { board, selectedClue } = state.game;
       
-      if (selectedClue) {
-        // Get answer from game data - fetchGameData just completed, so game.gameClues should be available
-        let answer: string | undefined = undefined;
-        if (game?.gameClues) {
-          const gameClue = game.gameClues.find(
-            (gc) => gc.id === selectedClue.gameClueId,
+      if (selectedClue && board?.board && 'categories' in board.board) {
+        const jeopardyBoard = board.board as JeopardyBoard;
+        for (const category of jeopardyBoard.categories) {
+          const clue = category.clues.find(
+            (c) => c.gameClueId === selectedClue.gameClueId,
           );
-          if (gameClue && gameClue.clue.answer) {
-            answer = gameClue.clue.answer;
+          if (clue && clue.state === 'ANSWERED') {
+            return {
+              updatedClue: {
+                ...selectedClue,
+                question: clue.question || selectedClue.question,
+                state: clue.state,
+                maxWager: response.maxWager, // Extract from backend response
+              },
+            };
           }
         }
-        
-        if (board?.board && 'categories' in board.board) {
-          const jeopardyBoard = board.board as JeopardyBoard;
-          for (const category of jeopardyBoard.categories) {
-            const clue = category.clues.find(
-              (c) => c.gameClueId === selectedClue.gameClueId,
-            );
-            if (clue && clue.state === 'ANSWERED') {
-              return {
-                updatedClue: {
-                  ...selectedClue,
-                  question: clue.question || selectedClue.question,
-                  answer: answer, // Use answer from gameClues
-                  state: clue.state,
-                  maxWager: response.maxWager,
-                  category: category.name, // Preserve category
-                },
-              };
-            }
-          }
-        }
-        
-        // Update selectedClue with answer and maxWager
-        // Preserve all existing fields including gameClueId and clueId
+      }
+      
+      // If selectedClue exists, update maxWager even if clue not found in board
+      if (selectedClue) {
         return {
           updatedClue: {
             ...selectedClue,
-            answer: answer, // Use answer from gameClues
-            maxWager: response.maxWager,
-            // Ensure gameClueId and clueId are preserved
-            gameClueId: selectedClue.gameClueId,
-            clueId: selectedClue.clueId,
-            category: selectedClue.category, // Preserve category
+            maxWager: response.maxWager, // Extract from backend response
           },
         };
       }
@@ -380,30 +307,6 @@ export const answerFinalJeopardy = createAsyncThunk(
       }
       return rejectWithValue({
         error: 'Failed to submit answer. Please try again.',
-        statusCode: 500,
-      });
-    }
-  },
-);
-
-// Thunk to end/abandon a game
-export const endGame = createAsyncThunk(
-  'game/endGame',
-  async (gameId: string, { dispatch, rejectWithValue }) => {
-    try {
-      await apiEndGame(gameId);
-      // Refresh game data to reflect the new state
-      await dispatch(fetchGameData(gameId));
-      return gameId;
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to end game. Please try again.',
         statusCode: 500,
       });
     }
@@ -550,59 +453,6 @@ const gameSlice = createSlice({
         state.gameId = game.id;
         state.error = null;
 
-        // Log if gameClues are missing (they should always be included for ACTIVE games)
-        if (game.state === 'ACTIVE' && (!game.gameClues || game.gameClues.length === 0)) {
-          console.warn('[fetchGameData.fulfilled] Game is ACTIVE but gameClues are missing or empty', {
-            gameId: game.id,
-            gameClues: game.gameClues,
-          });
-        }
-
-        // Restore missing IDs in selectedClue from board data if needed
-        // This ensures gameClueId and clueId are always available for answer extraction
-        if (state.selectedClue && board?.board && 'categories' in board.board) {
-          const jeopardyBoard = board.board as JeopardyBoard;
-          for (const category of jeopardyBoard.categories) {
-            const clue = category.clues.find(
-              (c) => 
-                (state.selectedClue?.gameClueId && c.gameClueId === state.selectedClue.gameClueId) ||
-                (state.selectedClue?.clueId && c.clueId === state.selectedClue.clueId) ||
-                (state.selectedClue?.question && c.question === state.selectedClue.question)
-            );
-            if (clue) {
-              // Restore missing IDs
-              if (!state.selectedClue.gameClueId && clue.gameClueId) {
-                state.selectedClue.gameClueId = clue.gameClueId;
-              }
-              if (!state.selectedClue.clueId && clue.clueId) {
-                state.selectedClue.clueId = clue.clueId;
-              }
-              break;
-            }
-          }
-        }
-
-        // Update selected clue with answer if it's in ANSWERED state
-        // The answer is always in gameClues, just like the question
-        // This ensures the answer is available immediately when game data is fetched
-        if (state.selectedClue && state.selectedClue.state === 'ANSWERED' && !state.selectedClue.answer) {
-          if (game.gameClues && game.gameClues.length > 0) {
-            // Try gameClueId first
-            let gameClue = state.selectedClue.gameClueId
-              ? game.gameClues.find((gc) => gc.id === state.selectedClue.gameClueId)
-              : null;
-            
-            // Fallback to clueId
-            if (!gameClue && state.selectedClue.clueId) {
-              gameClue = game.gameClues.find((gc) => gc.clueId === state.selectedClue.clueId);
-            }
-            
-            if (gameClue && gameClue.clue.answer) {
-              state.selectedClue.answer = gameClue.clue.answer;
-            }
-          }
-        }
-
         // Check if selected clue is now resolved
         if (state.selectedClue && board?.board && 'categories' in board.board) {
           const jeopardyBoard = board.board as JeopardyBoard;
@@ -664,36 +514,7 @@ const gameSlice = createSlice({
         state.error = null; // Clear error on new selection attempt
       })
       .addCase(selectClue.fulfilled, (state, action) => {
-        if (!action.payload) {
-          state.selectedClue = null;
-          return;
-        }
-        
         state.selectedClue = action.payload;
-        
-        // If clue is ANSWERED and answer is missing, try to get it from current game state
-        // This is a fallback in case the thunk didn't populate it
-        if (action.payload.state === 'ANSWERED' && !action.payload.answer) {
-          if (state.game?.gameClues && state.game.gameClues.length > 0) {
-            // Try to find by gameClueId first
-            let gameClue = state.game.gameClues.find(
-              (gc) => gc.id === action.payload.gameClueId,
-            );
-            
-            // Fallback: try to find by clueId
-            if (!gameClue) {
-              gameClue = state.game.gameClues.find(
-                (gc) => gc.clueId === action.payload.clueId,
-              );
-            }
-            
-            if (gameClue && gameClue.clue.answer) {
-              state.selectedClue.answer = gameClue.clue.answer;
-            } else {
-              console.warn(`[selectClue.fulfilled] Answer still missing after reducer fallback. gameClueId: ${action.payload.gameClueId}, clueId: ${action.payload.clueId}`);
-            }
-          }
-        }
       })
       .addCase(selectClue.rejected, (state, action) => {
         const payload = action.payload as { error?: string };
@@ -775,25 +596,6 @@ const gameSlice = createSlice({
         state.error = null; // Clear error on success
       })
       .addCase(answerFinalJeopardy.rejected, (state, action) => {
-        state.actionLoading = false;
-        const payload = action.payload as { error?: string; statusCode?: number };
-        if (payload?.error) {
-          state.error = payload.error;
-        }
-      });
-
-    // endGame
-    builder
-      .addCase(endGame.pending, (state) => {
-        state.actionLoading = true;
-        state.error = null;
-      })
-      .addCase(endGame.fulfilled, (state) => {
-        state.actionLoading = false;
-        state.error = null;
-        // Game state will be updated by fetchGameData
-      })
-      .addCase(endGame.rejected, (state, action) => {
         state.actionLoading = false;
         const payload = action.payload as { error?: string; statusCode?: number };
         if (payload?.error) {

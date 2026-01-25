@@ -25,7 +25,7 @@ function CallbackContent() {
 
         if (data.session) {
           // Successfully authenticated (email verification or other auth flow), redirect to games
-          router.push('/games');
+          router.push('/');
         } else {
           // No session, redirect to login
           router.push('/auth/login');

@@ -23,6 +23,19 @@ export function GameList({
   creatingGame,
   onEndGame,
 }: GameListProps) {
+  // Filter out completed and eliminated games
+  const activeGames = data?.games.filter(
+    (game) => game.state !== 'COMPLETED' && game.state !== 'ELIMINATED'
+  ) || [];
+
+  // Check if there's a game in progress
+  const hasGameInProgress = activeGames.some(
+    (game) =>
+      game.state === 'ACTIVE' ||
+      game.state === 'FINAL_PENDING' ||
+      game.state === 'FINAL_ACTIVE'
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -35,7 +48,7 @@ export function GameList({
     return <ErrorDisplay error={error} />;
   }
 
-  if (!data || data.games.length === 0) {
+  if (!data || activeGames.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-600 mb-4">No games yet.</p>
@@ -52,18 +65,24 @@ export function GameList({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">My Games</h2>
-        <button
-          onClick={onCreateGame}
-          disabled={creatingGame}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {creatingGame ? 'Creating...' : 'New Game'}
-        </button>
+      <div className="flex justify-end items-center mb-6">
+        {!hasGameInProgress && (
+          <button
+            onClick={onCreateGame}
+            disabled={creatingGame}
+            className="px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"
+            style={{
+              backgroundColor: '#001AA5',
+              borderColor: '#3F3A3E',
+              color: 'white',
+            }}
+          >
+            {creatingGame ? 'Creating...' : 'New Game'}
+          </button>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data.games.map((game) => (
+        {activeGames.map((game) => (
           <GameCard
             key={game.id}
             id={game.id}
@@ -75,11 +94,6 @@ export function GameList({
           />
         ))}
       </div>
-      {data.total > data.games.length && (
-        <p className="text-sm text-gray-500 text-center mt-4">
-          Showing {data.games.length} of {data.total} games
-        </p>
-      )}
     </div>
   );
 }

@@ -28,8 +28,6 @@ export function FinalJeopardyView({
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
-      <h2 className="text-3xl font-bold text-center">Final Jeopardy</h2>
-
       <div className="bg-blue-800 text-white p-4 rounded-lg text-center">
         <h3 className="text-xl font-semibold">Category:</h3>
         <p className="text-lg">{clue.category}</p>

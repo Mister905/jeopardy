@@ -18,10 +18,16 @@ export function ScoreDisplay({ score, className = '' }: ScoreDisplayProps) {
   const isInline = className.includes('inline');
   const forceWhite = className.includes('text-white');
   
-  // Use white color if explicitly requested, otherwise use conditional colors
-  const colorClass = forceWhite 
-    ? 'text-white' 
-    : isNegative ? 'text-red-600' : isZero ? 'text-gray-600' : 'text-green-600';
+  // Use red for negative scores, even if text-white is in className
+  // Otherwise use white if explicitly requested, or conditional colors
+  const colorClass = isNegative
+    ? '' // Will use inline style for red
+    : forceWhite 
+      ? 'text-white' 
+      : isZero ? 'text-gray-600' : 'text-green-600';
+  
+  // Inline style for negative scores (red)
+  const inlineStyle = isNegative ? { color: '#D20422' } : {};
   
   // Use span for inline usage (e.g., inside <p> tags), div for block usage
   const Component = isInline ? 'span' : 'div';
@@ -30,6 +36,7 @@ export function ScoreDisplay({ score, className = '' }: ScoreDisplayProps) {
   return (
     <Component
       className={`${baseClasses} ${colorClass} ${className}`}
+      style={inlineStyle}
     >
       {formattedScore}
     </Component>

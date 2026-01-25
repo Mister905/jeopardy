@@ -39,7 +39,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (user && pathname === '/auth/login') {
       // Only redirect if currently on login page to prevent loops
-      router.push('/games');
+      router.push('/');
     }
   }, [user, router, pathname]);
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
       const result = await dispatch(signInUser({ email, password }));
       if (signInUser.fulfilled.match(result)) {
         // Success - redirect to games
-        router.push('/games');
+        router.push('/');
       }
     }
   };
@@ -114,15 +114,17 @@ export default function LoginPage() {
     dispatch(clearSignUpSuccess());
   };
 
-  // Listen for auth state changes to redirect after successful sign up (if email verification not required)
-  // This is handled by useAuth hook in layout/components, but we can also check here
-  // The onAuthStateChange in hooks.ts will handle the redirect
-
   return (
     <div className="max-w-md mx-auto mt-12">
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-8">Jeopardy Game</h1>
-        <p className="text-gray-600 text-center mb-6">
+      <div
+        className="rounded-lg shadow-lg p-8 border-2"
+        style={{
+          backgroundColor: 'rgba(0, 26, 165, 0.3)',
+          borderColor: '#00188C',
+        }}
+      >
+        <h1 className="text-3xl font-bold text-center mb-8 text-white">Trivia Master</h1>
+        <p className="text-white opacity-80 text-center mb-6">
           {mode === 'signIn' ? 'Sign in to start playing' : 'Create an account to start playing'}
         </p>
 
@@ -133,7 +135,14 @@ export default function LoginPage() {
         )}
 
         {signUpSuccess && signUpMessage && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
+          <div
+            className="mb-4 px-4 py-3 rounded border-2"
+            style={{
+              backgroundColor: 'rgba(34, 197, 94, 0.2)',
+              borderColor: '#22c55e',
+              color: 'white',
+            }}
+          >
             <p>{signUpMessage}</p>
             <Button
               onClick={handleModeToggle}
@@ -148,7 +157,7 @@ export default function LoginPage() {
         {!signUpSuccess && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium text-white mb-1">
                 Email
               </label>
               <input
@@ -158,13 +167,17 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                style={{
+                  border: '2px solid #3F3A3E',
+                  backgroundColor: 'white',
+                }}
                 placeholder="your@email.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="block text-sm font-medium text-white mb-1">
                 Password
               </label>
               <input
@@ -175,11 +188,15 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 minLength={6}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                style={{
+                  border: '2px solid #3F3A3E',
+                  backgroundColor: 'white',
+                }}
                 placeholder={mode === 'signUp' ? 'At least 6 characters' : ''}
               />
               {mode === 'signUp' && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-white opacity-70">
                   Password must be at least 6 characters
                 </p>
               )}
@@ -189,7 +206,7 @@ export default function LoginPage() {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-white mb-1"
                 >
                   Confirm Password
                 </label>
@@ -201,7 +218,11 @@ export default function LoginPage() {
                   required
                   disabled={loading}
                   minLength={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                  className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                  style={{
+                    border: '2px solid #3F3A3E',
+                    backgroundColor: 'white',
+                  }}
                   placeholder="Confirm your password"
                 />
               </div>
@@ -229,7 +250,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleModeToggle}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-white opacity-80 hover:opacity-100 transition-opacity"
               disabled={loading}
             >
               {mode === 'signIn'

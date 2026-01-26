@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -12,10 +12,9 @@ import {
   submitClueWager,
   submitFinalJeopardyWager,
   answerFinalJeopardy,
-  startPolling,
-  stopPolling,
   clearError,
   setSelectedClue,
+  resetGameState,
 } from '@/store/gameSlice';
 import { GameBoard } from '@/components/game/GameBoard';
 import { FinalJeopardyView } from '@/components/game/FinalJeopardyView';
@@ -26,6 +25,7 @@ import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 import { AnswerAdjudication } from '@/components/game/AnswerAdjudication';
 import { WagerInput } from '@/components/game/WagerInput';
 import { createGame } from '@/lib/api/games';
+import { getUserDashboard } from '@/lib/api/user';
 import type { JeopardyBoard } from '@/lib/api/types';
 
 // Mark as dynamic to prevent static generation
@@ -34,12 +34,15 @@ export const dynamic = 'force-dynamic';
 export default function GameDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useRequireAuth();
   const gameId = params.id as string;
   const dispatch = useAppDispatch();
+  const autoStartAttempted = useRef(false);
   
   // Track Daily Double flow step: 'intro' | 'wager' | 'question'
   const [dailyDoubleStep, setDailyDoubleStep] = useState<'intro' | 'wager' | 'question'>('intro');
+  const [username, setUsername] = useState<string | null>(null);
 
   // Get all state from Redux
   const game = useAppSelector((state) => state.game.game);
@@ -47,37 +50,72 @@ export default function GameDetailPage() {
   const selectedClue = useAppSelector((state) => state.game.selectedClue);
   const actionLoading = useAppSelector((state) => state.game.actionLoading);
   const error = useAppSelector((state) => state.game.error);
-  const isPolling = useAppSelector((state) => state.game.isPolling);
+  const currentGameId = useAppSelector((state) => state.game.gameId);
   const loading = useAppSelector((state) => !state.game.game && !state.game.error);
+
+  // Clear game state when gameId changes to prevent showing previous game
+  // This ensures we don't briefly show the previous game's board when navigating
+  useEffect(() => {
+    if (gameId) {
+      // If we have a different game loaded, or if we have game data but it's for a different game, clear it
+      if (
+        (currentGameId && currentGameId !== gameId) ||
+        (game && game.id !== gameId)
+      ) {
+        // Game ID changed, clear the old game state immediately
+        dispatch(resetGameState());
+      }
+    }
+  }, [gameId, currentGameId, game?.id, dispatch]);
 
   // Initialize game data on mount
   useEffect(() => {
     if (!authLoading && user && gameId) {
-      dispatch(fetchGameData(gameId));
-    }
-  }, [authLoading, user, gameId, dispatch]);
-
-  // Start/stop polling based on game state
-  useEffect(() => {
-    if (!game || authLoading) return;
-
-    const shouldPoll =
-      game.state === 'ACTIVE' ||
-      game.state === 'FINAL_PENDING' ||
-      game.state === 'FINAL_ACTIVE';
-
-    if (shouldPoll && !isPolling && !actionLoading) {
-      dispatch(startPolling(gameId));
-    } else if (!shouldPoll && isPolling) {
-      dispatch(stopPolling());
-    }
-
-    return () => {
-      if (isPolling) {
-        dispatch(stopPolling());
+      // Only fetch if we don't have game data or if gameId changed
+      if (!game || game.id !== gameId) {
+        dispatch(fetchGameData(gameId));
       }
-    };
-  }, [game?.state, isPolling, actionLoading, gameId, dispatch, authLoading]);
+    }
+  }, [authLoading, user, gameId, dispatch, game?.id]);
+
+  // Fetch username for display
+  useEffect(() => {
+    if (!authLoading && user && !username) {
+      getUserDashboard()
+        .then((data) => setUsername(data.username))
+        .catch((err) => {
+          console.error('Failed to fetch username:', err);
+          // Don't set username on error, will fallback to round name
+        });
+    }
+  }, [authLoading, user, username]);
+
+  const handleStartGame = async () => {
+    if (!game) return;
+    await dispatch(startGame(gameId));
+  };
+
+  // Auto-start game if requested via query parameter
+  useEffect(() => {
+    const autoStart = searchParams?.get('autoStart') === 'true';
+    if (
+      autoStart &&
+      !autoStartAttempted.current &&
+      game &&
+      game.state === 'PENDING' &&
+      !actionLoading
+    ) {
+      autoStartAttempted.current = true;
+      // Start the game automatically
+      dispatch(startGame(gameId));
+      // Remove query parameter from URL
+      router.replace(`/games/${gameId}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, actionLoading, searchParams, gameId, router]);
+
+  // Polling removed - not needed for single-player game
+  // All state changes are triggered by user actions which already fetch game data
 
   // Handle 401/403 errors - redirect to login
   useEffect(() => {
@@ -85,11 +123,6 @@ export default function GameDetailPage() {
       router.push('/auth/login');
     }
   }, [error, router]);
-
-  const handleStartGame = async () => {
-    if (!game) return;
-    await dispatch(startGame(gameId));
-  };
 
   const handleClueClick = (clueId: string, gameClueId: string) => {
     dispatch(selectClue({ clueId, gameClueId }));
@@ -133,7 +166,11 @@ export default function GameDetailPage() {
     }
   }, [selectedClue?.gameClueId, selectedClue?.isDailyDouble, selectedClue?.state]);
 
-  if (authLoading || loading) {
+  // Don't show old game data if gameId doesn't match
+  const isGameIdMismatch = game && game.id !== gameId;
+  const shouldShowLoading = authLoading || loading || isGameIdMismatch;
+
+  if (shouldShowLoading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
         <LoadingSpinner size="lg" />
@@ -193,19 +230,28 @@ export default function GameDetailPage() {
       {/* PENDING State */}
       {game.state === 'PENDING' && (
         <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
-          <h2 className="text-2xl font-bold mb-4 text-white">Ready to Start</h2>
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-              {error}
+          {actionLoading ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <LoadingSpinner size="lg" />
+              <p className="mt-4 text-white text-lg">Preparing your game board...</p>
             </div>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold mb-4 text-white">Ready to Start</h2>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+              <Button
+                onClick={handleStartGame}
+                disabled={actionLoading}
+                className="w-full"
+              >
+                Start Game
+              </Button>
+            </>
           )}
-          <Button
-            onClick={handleStartGame}
-            disabled={actionLoading}
-            className="w-full"
-          >
-            {actionLoading ? 'Starting...' : 'Start Game'}
-          </Button>
         </div>
       )}
 
@@ -217,7 +263,7 @@ export default function GameDetailPage() {
               board={board.board as JeopardyBoard}
               gameId={gameId}
               onClueClick={handleClueClick}
-              userEmail={user?.email}
+              username={username || undefined}
             />
           ) : (
             <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -366,23 +412,12 @@ export default function GameDetailPage() {
       {/* Selected Clue Modal/View */}
       {selectedClue && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.95)', borderColor: '#00188C', color: 'white' }}>
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                {!selectedClue.isDailyDouble && (
-                  <h3 className="text-2xl font-bold text-center text-white">
-                    {selectedClue.category || 'Clue'}
-                  </h3>
-                )}
-              </div>
-              <button
-                onClick={handleCloseClue}
-                className="text-white hover:opacity-70 text-2xl"
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
+          <div className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-10 border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.95)', borderColor: '#00188C', color: 'white' }}>
+            {!selectedClue.isDailyDouble && (
+              <h3 className="text-2xl font-bold text-center text-white mb-4">
+                {selectedClue.category || 'Clue'}
+              </h3>
+            )}
 
             {selectedClue.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'intro' && (
               <div className="space-y-6 text-center">

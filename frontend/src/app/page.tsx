@@ -58,7 +58,9 @@ export default function HomePage() {
       if (username) {
         localStorage.removeItem('pendingUsername');
       }
-      router.push(`/games/${newGame.id}`);
+      // Navigate immediately - the game detail page will clear old state and show loading
+      // Automatically start the game after creation
+      router.push(`/games/${newGame.id}?autoStart=true`);
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {

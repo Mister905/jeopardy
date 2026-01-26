@@ -21,25 +21,25 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Statistics fields
-  totalGamesPlayed                        Int     @default(0)
-  averageScore                            Float   @default(0)
+  totalGamesPlayed                        Int?
+  averageScore                            Float?
   bestScore                               Int?
   worstScore                              Int?
-  totalWinnings                           Int     @default(0)
-  totalCorrectAnswers                     Int     @default(0)
-  totalIncorrectAnswers                   Int     @default(0)
-  jeopardyCorrect                         Int     @default(0)
-  jeopardyIncorrect                       Int     @default(0)
-  doubleJeopardyCorrect                  Int     @default(0)
-  doubleJeopardyIncorrect                Int     @default(0)
-  finalJeopardyCorrect                   Int     @default(0)
-  finalJeopardyIncorrect                 Int     @default(0)
-  dailyDoubleCorrect                      Int     @default(0)
-  dailyDoubleIncorrect                    Int     @default(0)
-  currentCorrectStreak                    Int     @default(0)
-  longestCorrectStreak                    Int     @default(0)
-  currentIncorrectStreak                  Int     @default(0)
-  longestIncorrectStreak                  Int     @default(0)
+  totalWinnings                           Int?
+  totalCorrectAnswers                     Int?
+  totalIncorrectAnswers                   Int?
+  jeopardyCorrect                         Int?
+  jeopardyIncorrect                       Int?
+  doubleJeopardyCorrect                  Int?
+  doubleJeopardyIncorrect                Int?
+  finalJeopardyCorrect                   Int?
+  finalJeopardyIncorrect                 Int?
+  dailyDoubleCorrect                      Int?
+  dailyDoubleIncorrect                   Int?
+  currentCorrectStreak                    Int?
+  longestCorrectStreak                    Int?
+  currentIncorrectStreak                  Int?
+  longestIncorrectStreak                  Int?
   largestSuccessfulDailyDoubleWager      Int?
   largestSuccessfulFinalJeopardyWager    Int?
   largestUnsuccessfulDailyDoubleWager     Int?

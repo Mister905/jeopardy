@@ -124,7 +124,7 @@ export function GameCard({
                   disabled={ending}
                   className="flex-1 px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
                 >
-                  {ending ? 'Ending...' : 'Yes, End Game'}
+                  {ending ? 'Ending...' : 'Confirm'}
                 </button>
                 <button
                   onClick={(e) => {

@@ -16,7 +16,7 @@ export function SummarySection({ stats }: SummarySectionProps) {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div>
           <p className="text-white opacity-80 text-sm">Games Played</p>
-          <p className="text-white text-2xl font-bold">{stats.totalGamesPlayed}</p>
+          <p className="text-white text-2xl font-bold">{stats.totalGamesPlayed ?? 'N/A'}</p>
         </div>
         <div>
           <p className="text-white opacity-80 text-sm">Average Score</p>

@@ -28,6 +28,29 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
+  // Refresh dashboard when page becomes visible (e.g., user navigates back from a game)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !authLoading && user) {
+        fetchDashboard();
+      }
+    };
+
+    const handleFocus = () => {
+      if (!authLoading && user) {
+        fetchDashboard();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [authLoading, user]);
+
   const fetchDashboard = async () => {
     setLoading(true);
     setError(null);
@@ -35,6 +58,7 @@ export default function DashboardPage() {
       const data = await getUserDashboard();
       setDashboardData(data);
     } catch (err) {
+      console.error('Dashboard fetch error:', err);
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
           // Auth hook will handle redirect

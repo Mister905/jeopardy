@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Button } from '../ui/Button';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getGame } from '@/lib/api/games';
 
 interface AnswerAdjudicationProps {
@@ -129,7 +130,7 @@ export function AnswerAdjudication({
   return (
     <div className="space-y-4 p-6 rounded-lg" style={{ backgroundColor: 'rgba(0, 24, 140, 0.3)', border: '2px solid #00188C' }}>
       <div>
-        <p className="text-white">{question}</p>
+        <p className="text-white text-center text-lg leading-relaxed">{question}</p>
       </div>
 
       {showAnswer && (
@@ -147,9 +148,10 @@ export function AnswerAdjudication({
       )}
 
       {!showAnswer && (
-        <Button
-          className="w-full"
-          onClick={() => {
+        <div style={{ marginTop: '3rem' }}>
+          <Button
+            className="w-full"
+            onClick={() => {
             // When "Show Answer" is clicked, try to extract answer immediately if not already set
             if (!answer && gameClues && gameClues.length > 0 && (gameClueId || clueId)) {
               let gameClue = gameClueId
@@ -203,43 +205,53 @@ export function AnswerAdjudication({
             
             setShowAnswer(true);
           }}
-          variant="secondary"
-          disabled={loading || submitting}
-        >
-          Show Answer
-        </Button>
+            variant="secondary"
+            disabled={loading || submitting}
+          >
+            Show Answer
+          </Button>
+        </div>
       )}
 
       {showAnswer && (
-        <div className="flex gap-4">
-          <Button
-            onClick={() => handleAnswer(true)}
-            disabled={loading || submitting}
-            className="flex-1"
-            style={{
-              backgroundColor: '#00B4D8',
-              border: '2px solid #3F3A3E',
-            }}
-            onMouseEnter={(e) => {
-              if (!loading && !submitting) {
-                e.currentTarget.style.backgroundColor = '#0096C7';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#00B4D8';
-            }}
-          >
-            {submitting ? 'Submitting...' : 'I got it right'}
-          </Button>
-          <Button
-            onClick={() => handleAnswer(false)}
-            disabled={loading || submitting}
-            variant="danger"
-            className="flex-1"
-          >
-            {submitting ? 'Submitting...' : 'I got it wrong'}
-          </Button>
-        </div>
+        <>
+          {submitting ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <LoadingSpinner size="lg" />
+              <p className="mt-4 text-white text-lg font-medium">Submitting...</p>
+            </div>
+          ) : (
+            <div className="flex gap-4">
+              <Button
+                onClick={() => handleAnswer(true)}
+                disabled={loading || submitting}
+                className="flex-1"
+                style={{
+                  backgroundColor: '#00B4D8',
+                  border: '2px solid #3F3A3E',
+                }}
+                onMouseEnter={(e) => {
+                  if (!loading && !submitting) {
+                    e.currentTarget.style.backgroundColor = '#0096C7';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#00B4D8';
+                }}
+              >
+                I got it right
+              </Button>
+              <Button
+                onClick={() => handleAnswer(false)}
+                disabled={loading || submitting}
+                variant="danger"
+                className="flex-1"
+              >
+                I got it wrong
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

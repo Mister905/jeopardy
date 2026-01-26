@@ -18,7 +18,7 @@ export function AccuracySection({ stats }: AccuracySectionProps) {
           <p className="text-white opacity-80 text-sm">Overall Accuracy</p>
           <p className="text-white text-xl font-bold">{formatPercentage(stats.overallAccuracy)}</p>
           <p className="text-white opacity-70 text-xs mt-1">
-            {stats.correctAnswerCount} correct, {stats.incorrectAnswerCount} incorrect
+            {stats.correctAnswerCount ?? 0} correct, {stats.incorrectAnswerCount ?? 0} incorrect
           </p>
         </div>
         <div>

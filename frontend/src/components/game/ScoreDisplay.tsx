@@ -24,7 +24,7 @@ export function ScoreDisplay({ score, className = '' }: ScoreDisplayProps) {
     ? '' // Will use inline style for red
     : forceWhite 
       ? 'text-white' 
-      : isZero ? 'text-gray-600' : 'text-green-600';
+      : isZero ? 'text-white' : 'text-green-600';
   
   // Inline style for negative scores (red)
   const inlineStyle = isNegative ? { color: '#D20422' } : {};

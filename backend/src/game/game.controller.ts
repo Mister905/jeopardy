@@ -450,6 +450,36 @@ export class GameController {
   }
 
   /**
+   * POST /games/:id/end
+   * End/abandon a game that is in progress
+   */
+  @Post(':id/end')
+  @HttpCode(HttpStatus.OK)
+  async endGame(
+    @Param('id') gameId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<GameResponseDto> {
+    this.logger.log(`Ending game ${gameId} for user: ${user.userId}`);
+
+    try {
+      const game = await this.gameService.endGame(gameId, user.userId);
+      const gameWithRelations = await this.gameService.getGameById(
+        gameId,
+        user.userId,
+      );
+      if (!gameWithRelations) {
+        throw new GameNotFoundException(gameId);
+      }
+      return this.mapGameToResponseDto(gameWithRelations);
+    } catch (error) {
+      this.logger.error(
+        `Failed to end game: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      this.handleServiceError(error, gameId, user.userId);
+    }
+  }
+
+  /**
    * Map game entity to response DTO
    */
   private mapGameToResponseDto(game: GameWithRelations): GameResponseDto {

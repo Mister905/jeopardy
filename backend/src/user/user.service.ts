@@ -73,47 +73,47 @@ export class UserService {
       throw new Error('User not found');
     }
 
-    // Compute accuracy percentages
+    // Compute accuracy percentages - handle null values by treating as 0
     const overallAccuracy = this.calculateAccuracy(
-      user.totalCorrectAnswers,
-      user.totalIncorrectAnswers,
+      user.totalCorrectAnswers ?? 0,
+      user.totalIncorrectAnswers ?? 0,
     );
     const jeopardyAccuracy = this.calculateAccuracy(
-      user.jeopardyCorrect,
-      user.jeopardyIncorrect,
+      user.jeopardyCorrect ?? 0,
+      user.jeopardyIncorrect ?? 0,
     );
     const doubleJeopardyAccuracy = this.calculateAccuracy(
-      user.doubleJeopardyCorrect,
-      user.doubleJeopardyIncorrect,
+      user.doubleJeopardyCorrect ?? 0,
+      user.doubleJeopardyIncorrect ?? 0,
     );
     const finalJeopardyAccuracy = this.calculateAccuracy(
-      user.finalJeopardyCorrect,
-      user.finalJeopardyIncorrect,
+      user.finalJeopardyCorrect ?? 0,
+      user.finalJeopardyIncorrect ?? 0,
     );
     const dailyDoubleAccuracy = this.calculateAccuracy(
-      user.dailyDoubleCorrect,
-      user.dailyDoubleIncorrect,
+      user.dailyDoubleCorrect ?? 0,
+      user.dailyDoubleIncorrect ?? 0,
     );
 
     return {
       username: user.username,
       stats: {
-        totalGamesPlayed: user.totalGamesPlayed,
-        averageScore: user.averageScore,
+        totalGamesPlayed: user.totalGamesPlayed ?? null,
+        averageScore: user.averageScore ?? null,
         bestScore: user.bestScore,
         worstScore: user.worstScore,
-        totalWinnings: user.totalWinnings,
+        totalWinnings: user.totalWinnings ?? 0,
         overallAccuracy,
-        correctAnswerCount: user.totalCorrectAnswers,
-        incorrectAnswerCount: user.totalIncorrectAnswers,
+        correctAnswerCount: user.totalCorrectAnswers ?? null,
+        incorrectAnswerCount: user.totalIncorrectAnswers ?? null,
         jeopardyAccuracy,
         doubleJeopardyAccuracy,
         finalJeopardyAccuracy,
         dailyDoubleAccuracy,
-        currentCorrectStreak: user.currentCorrectStreak,
-        longestCorrectStreak: user.longestCorrectStreak,
-        currentIncorrectStreak: user.currentIncorrectStreak,
-        longestIncorrectStreak: user.longestIncorrectStreak,
+        currentCorrectStreak: user.currentCorrectStreak ?? null,
+        longestCorrectStreak: user.longestCorrectStreak ?? null,
+        currentIncorrectStreak: user.currentIncorrectStreak ?? null,
+        longestIncorrectStreak: user.longestIncorrectStreak ?? null,
         largestSuccessfulDailyDoubleWager: user.largestSuccessfulDailyDoubleWager,
         largestSuccessfulFinalJeopardyWager:
           user.largestSuccessfulFinalJeopardyWager,
@@ -133,11 +133,14 @@ export class UserService {
     gameClue: GameClue & { clue: { round: Round } },
     correct: boolean,
   ): Promise<void> {
+    this.logger.log(
+      `Updating stats for clue resolution - User: ${userId}, Round: ${gameClue.clue.round}, Daily Double: ${gameClue.isDailyDouble || gameClue.wager !== null}, Correct: ${correct}`,
+    );
     try {
       const round = gameClue.clue.round;
       const isDailyDouble = gameClue.isDailyDouble || gameClue.wager !== null;
 
-      // Fetch current user to get streak state
+      // Fetch current user to get streak state and current counters
       const user = await this.prismaService.client.user.findUnique({
         where: { id: userId },
         select: {
@@ -145,6 +148,14 @@ export class UserService {
           currentIncorrectStreak: true,
           longestCorrectStreak: true,
           longestIncorrectStreak: true,
+          totalCorrectAnswers: true,
+          totalIncorrectAnswers: true,
+          jeopardyCorrect: true,
+          jeopardyIncorrect: true,
+          doubleJeopardyCorrect: true,
+          doubleJeopardyIncorrect: true,
+          dailyDoubleCorrect: true,
+          dailyDoubleIncorrect: true,
         },
       });
 
@@ -153,22 +164,32 @@ export class UserService {
         return;
       }
 
+      this.logger.log(
+        `Current stats - Total: ${user.totalCorrectAnswers ?? 'null'}/${user.totalIncorrectAnswers ?? 'null'}, Jeopardy: ${user.jeopardyCorrect ?? 'null'}/${user.jeopardyIncorrect ?? 'null'}, Double: ${user.doubleJeopardyCorrect ?? 'null'}/${user.doubleJeopardyIncorrect ?? 'null'}, DD: ${user.dailyDoubleCorrect ?? 'null'}/${user.dailyDoubleIncorrect ?? 'null'}`,
+      );
+
+      // Handle null values - treat as 0 for calculations
+      const currentCorrectStreak = user.currentCorrectStreak ?? 0;
+      const currentIncorrectStreak = user.currentIncorrectStreak ?? 0;
+      const longestCorrectStreak = user.longestCorrectStreak ?? 0;
+      const longestIncorrectStreak = user.longestIncorrectStreak ?? 0;
+
       // Calculate new streak values
-      let newCurrentCorrectStreak = user.currentCorrectStreak;
-      let newCurrentIncorrectStreak = user.currentIncorrectStreak;
-      let newLongestCorrectStreak = user.longestCorrectStreak;
-      let newLongestIncorrectStreak = user.longestIncorrectStreak;
+      let newCurrentCorrectStreak = currentCorrectStreak;
+      let newCurrentIncorrectStreak = currentIncorrectStreak;
+      let newLongestCorrectStreak = longestCorrectStreak;
+      let newLongestIncorrectStreak = longestIncorrectStreak;
 
       if (correct) {
-        newCurrentCorrectStreak = user.currentCorrectStreak + 1;
+        newCurrentCorrectStreak = currentCorrectStreak + 1;
         newCurrentIncorrectStreak = 0;
-        if (newCurrentCorrectStreak > user.longestCorrectStreak) {
+        if (newCurrentCorrectStreak > longestCorrectStreak) {
           newLongestCorrectStreak = newCurrentCorrectStreak;
         }
       } else {
-        newCurrentIncorrectStreak = user.currentIncorrectStreak + 1;
+        newCurrentIncorrectStreak = currentIncorrectStreak + 1;
         newCurrentCorrectStreak = 0;
-        if (newCurrentIncorrectStreak > user.longestIncorrectStreak) {
+        if (newCurrentIncorrectStreak > longestIncorrectStreak) {
           newLongestIncorrectStreak = newCurrentIncorrectStreak;
         }
       }
@@ -181,41 +202,55 @@ export class UserService {
         longestIncorrectStreak: newLongestIncorrectStreak,
       };
 
-      // Update overall counters
+      // Update overall counters - handle null by treating as 0
       if (correct) {
-        updateData.totalCorrectAnswers = { increment: 1 };
+        const currentTotal = user.totalCorrectAnswers ?? 0;
+        updateData.totalCorrectAnswers = currentTotal + 1;
       } else {
-        updateData.totalIncorrectAnswers = { increment: 1 };
+        const currentTotal = user.totalIncorrectAnswers ?? 0;
+        updateData.totalIncorrectAnswers = currentTotal + 1;
       }
 
       // Update round-specific counters
       if (round === Round.JEOPARDY) {
         if (correct) {
-          updateData.jeopardyCorrect = { increment: 1 };
+          const current = user.jeopardyCorrect ?? 0;
+          updateData.jeopardyCorrect = current + 1;
         } else {
-          updateData.jeopardyIncorrect = { increment: 1 };
+          const current = user.jeopardyIncorrect ?? 0;
+          updateData.jeopardyIncorrect = current + 1;
         }
       } else if (round === Round.DOUBLE_JEOPARDY) {
         if (correct) {
-          updateData.doubleJeopardyCorrect = { increment: 1 };
+          const current = user.doubleJeopardyCorrect ?? 0;
+          updateData.doubleJeopardyCorrect = current + 1;
         } else {
-          updateData.doubleJeopardyIncorrect = { increment: 1 };
+          const current = user.doubleJeopardyIncorrect ?? 0;
+          updateData.doubleJeopardyIncorrect = current + 1;
         }
       }
 
       // Update Daily Double counters if applicable
       if (isDailyDouble) {
         if (correct) {
-          updateData.dailyDoubleCorrect = { increment: 1 };
+          const current = user.dailyDoubleCorrect ?? 0;
+          updateData.dailyDoubleCorrect = current + 1;
         } else {
-          updateData.dailyDoubleIncorrect = { increment: 1 };
+          const current = user.dailyDoubleIncorrect ?? 0;
+          updateData.dailyDoubleIncorrect = current + 1;
         }
       }
 
-      await this.prismaService.client.user.update({
+      this.logger.log(`Updating stats with: ${JSON.stringify(updateData)}`);
+
+      const updatedUser = await this.prismaService.client.user.update({
         where: { id: userId },
         data: updateData,
       });
+
+      this.logger.log(
+        `Updated stats - Total: ${updatedUser.totalCorrectAnswers ?? 'null'}/${updatedUser.totalIncorrectAnswers ?? 'null'}, Jeopardy: ${updatedUser.jeopardyCorrect ?? 'null'}/${updatedUser.jeopardyIncorrect ?? 'null'}, Double: ${updatedUser.doubleJeopardyCorrect ?? 'null'}/${updatedUser.doubleJeopardyIncorrect ?? 'null'}, DD: ${updatedUser.dailyDoubleCorrect ?? 'null'}/${updatedUser.dailyDoubleIncorrect ?? 'null'}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to update user stats on clue resolution: ${error.message}`,
@@ -232,6 +267,9 @@ export class UserService {
     wager: number,
     correct: boolean,
   ): Promise<void> {
+    this.logger.log(
+      `Updating Daily Double wager stats for user ${userId}: wager=${wager}, correct=${correct}`,
+    );
     try {
       const user = await this.prismaService.client.user.findUnique({
         where: { id: userId },
@@ -246,6 +284,10 @@ export class UserService {
         return;
       }
 
+      this.logger.log(
+        `Current Daily Double stats - Successful: ${user.largestSuccessfulDailyDoubleWager ?? 'null'}, Unsuccessful: ${user.largestUnsuccessfulDailyDoubleWager ?? 'null'}`,
+      );
+
       const updateData: Prisma.UserUpdateInput = {};
 
       if (correct) {
@@ -254,6 +296,9 @@ export class UserService {
           wager > user.largestSuccessfulDailyDoubleWager
         ) {
           updateData.largestSuccessfulDailyDoubleWager = wager;
+          this.logger.log(`Updating largest successful Daily Double wager to ${wager}`);
+        } else {
+          this.logger.log(`Wager ${wager} not larger than current ${user.largestSuccessfulDailyDoubleWager}, skipping update`);
         }
       } else {
         if (
@@ -261,6 +306,9 @@ export class UserService {
           wager > user.largestUnsuccessfulDailyDoubleWager
         ) {
           updateData.largestUnsuccessfulDailyDoubleWager = wager;
+          this.logger.log(`Updating largest unsuccessful Daily Double wager to ${wager}`);
+        } else {
+          this.logger.log(`Wager ${wager} not larger than current ${user.largestUnsuccessfulDailyDoubleWager}, skipping update`);
         }
       }
 
@@ -269,11 +317,15 @@ export class UserService {
           where: { id: userId },
           data: updateData,
         });
+        this.logger.log(`Successfully updated Daily Double wager stats`);
+      } else {
+        this.logger.log(`No update needed for Daily Double wager stats`);
       }
     } catch (error) {
       this.logger.error(
-        `Failed to update Daily Double wager stats: ${error.message}`,
+        `Failed to update Daily Double wager stats for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.logger.error(`Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
       // Don't throw - stats are secondary
     }
   }
@@ -286,6 +338,9 @@ export class UserService {
     wager: number,
     correct: boolean,
   ): Promise<void> {
+    this.logger.log(
+      `Updating Final Jeopardy wager stats for user ${userId}: wager=${wager}, correct=${correct}`,
+    );
     try {
       const user = await this.prismaService.client.user.findUnique({
         where: { id: userId },
@@ -304,23 +359,39 @@ export class UserService {
         return;
       }
 
+      this.logger.log(
+        `Current Final Jeopardy stats - Successful: ${user.largestSuccessfulFinalJeopardyWager ?? 'null'}, Unsuccessful: ${user.largestUnsuccessfulFinalJeopardyWager ?? 'null'}`,
+      );
+
+      this.logger.log(
+        `Current Final Jeopardy stats - Correct: ${user.finalJeopardyCorrect ?? 'null'}, Incorrect: ${user.finalJeopardyIncorrect ?? 'null'}`,
+      );
+
       const updateData: Prisma.UserUpdateInput = {};
 
       if (correct) {
-        updateData.finalJeopardyCorrect = { increment: 1 };
+        const current = user.finalJeopardyCorrect ?? 0;
+        updateData.finalJeopardyCorrect = current + 1;
         if (
           !user.largestSuccessfulFinalJeopardyWager ||
           wager > user.largestSuccessfulFinalJeopardyWager
         ) {
           updateData.largestSuccessfulFinalJeopardyWager = wager;
+          this.logger.log(`Updating largest successful Final Jeopardy wager to ${wager}`);
+        } else {
+          this.logger.log(`Wager ${wager} not larger than current ${user.largestSuccessfulFinalJeopardyWager}, skipping update`);
         }
       } else {
-        updateData.finalJeopardyIncorrect = { increment: 1 };
+        const current = user.finalJeopardyIncorrect ?? 0;
+        updateData.finalJeopardyIncorrect = current + 1;
         if (
           !user.largestUnsuccessfulFinalJeopardyWager ||
           wager > user.largestUnsuccessfulFinalJeopardyWager
         ) {
           updateData.largestUnsuccessfulFinalJeopardyWager = wager;
+          this.logger.log(`Updating largest unsuccessful Final Jeopardy wager to ${wager}`);
+        } else {
+          this.logger.log(`Wager ${wager} not larger than current ${user.largestUnsuccessfulFinalJeopardyWager}, skipping update`);
         }
       }
 
@@ -328,10 +399,12 @@ export class UserService {
         where: { id: userId },
         data: updateData,
       });
+      this.logger.log(`Successfully updated Final Jeopardy wager stats`);
     } catch (error) {
       this.logger.error(
-        `Failed to update Final Jeopardy wager stats: ${error.message}`,
+        `Failed to update Final Jeopardy wager stats for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.logger.error(`Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
       // Don't throw - stats are secondary
     }
   }
@@ -343,6 +416,9 @@ export class UserService {
     userId: string,
     finalScore: number,
   ): Promise<void> {
+    this.logger.log(
+      `Updating game completion stats for user ${userId} with final score ${finalScore}`,
+    );
     try {
       const user = await this.prismaService.client.user.findUnique({
         where: { id: userId },
@@ -360,13 +436,20 @@ export class UserService {
         return;
       }
 
-      const newTotalGames = user.totalGamesPlayed + 1;
+      this.logger.log(
+        `Current stats - Games: ${user.totalGamesPlayed ?? 'null'}, Avg: ${user.averageScore ?? 'null'}, Best: ${user.bestScore ?? 'null'}, Worst: ${user.worstScore ?? 'null'}, Winnings: ${user.totalWinnings ?? 'null'}`,
+      );
+
+      // Handle null values - treat as 0 for calculations
+      const currentGamesPlayed = user.totalGamesPlayed ?? 0;
+      const currentAverageScore = user.averageScore ?? 0;
+      const newTotalGames = currentGamesPlayed + 1;
       const newAverageScore =
-        (user.averageScore * user.totalGamesPlayed + finalScore) /
+        (currentAverageScore * currentGamesPlayed + finalScore) /
         newTotalGames;
 
       const updateData: Prisma.UserUpdateInput = {
-        totalGamesPlayed: { increment: 1 },
+        totalGamesPlayed: newTotalGames,
         averageScore: newAverageScore,
       };
 
@@ -381,18 +464,30 @@ export class UserService {
       }
 
       // Update total winnings (only if positive)
+      // Always ensure totalWinnings is set (not null) - 0 if score is negative or zero
+      const currentWinnings = user.totalWinnings ?? 0;
       if (finalScore > 0) {
-        updateData.totalWinnings = { increment: finalScore };
+        updateData.totalWinnings = currentWinnings + finalScore;
+      } else {
+        // Set to current winnings (or 0 if null) - ensures field is never null
+        updateData.totalWinnings = currentWinnings;
       }
 
-      await this.prismaService.client.user.update({
+      this.logger.log(`Updating user stats with: ${JSON.stringify(updateData)}`);
+
+      const updatedUser = await this.prismaService.client.user.update({
         where: { id: userId },
         data: updateData,
       });
+
+      this.logger.log(
+        `Successfully updated stats - Games: ${updatedUser.totalGamesPlayed}, Avg: ${updatedUser.averageScore}`,
+      );
     } catch (error) {
       this.logger.error(
-        `Failed to update game completion stats: ${error.message}`,
+        `Failed to update game completion stats for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.logger.error(`Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
       // Don't throw - stats are secondary
     }
   }

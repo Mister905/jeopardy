@@ -8,10 +8,10 @@ interface GameBoardProps {
   board: JeopardyBoard;
   gameId: string;
   onClueClick: (clueId: string, gameClueId: string) => void;
-  userEmail?: string;
+  username?: string;
 }
 
-export function GameBoard({ board, gameId, onClueClick, userEmail }: GameBoardProps) {
+export function GameBoard({ board, gameId, onClueClick, username }: GameBoardProps) {
   return (
     <div 
       className="w-full p-4 rounded-lg"
@@ -21,7 +21,7 @@ export function GameBoard({ board, gameId, onClueClick, userEmail }: GameBoardPr
       }}
     >
       <h2 className="text-2xl font-bold mb-4 text-center text-white">
-        {userEmail || (board.round === 'JEOPARDY' ? 'Jeopardy!' : 'Double Jeopardy!')}
+        {username || (board.round === 'JEOPARDY' ? 'Jeopardy!' : 'Double Jeopardy!')}
       </h2>
       <div className="grid grid-cols-6 gap-1">
         {/* Category headers */}

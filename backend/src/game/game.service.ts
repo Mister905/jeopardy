@@ -281,6 +281,7 @@ export class GameService {
 
   /**
    * Start a game by creating Jeopardy and Double Jeopardy boards
+   * Retries category selection until all required clues are found
    * @param gameId - Game ID
    * @param userId - User ID for authorization
    * @throws Error if game not found, wrong user, or invalid state
@@ -295,16 +296,437 @@ export class GameService {
       throw new Error(`Game cannot be started. Current state: ${game.state}`);
     }
 
-    // TODO: Implement board creation logic
-    // This requires:
-    // 1. Select 6 categories × 5 clues for Jeopardy round
-    // 2. Select 6 categories × 5 clues for Double Jeopardy round
-    // 3. Ensure Jeopardy has exactly 1 Daily Double
-    // 4. Ensure Double Jeopardy has exactly 2 Daily Doubles
-    // 5. Create GameClue records for all clues
-    // 6. Transition game state to ACTIVE
+    // Jeopardy round values: 200, 400, 600, 800, 1000
+    const jeopardyValues = [200, 400, 600, 800, 1000];
+    // Double Jeopardy round values: 400, 800, 1200, 1600, 2000
+    const doubleJeopardyValues = [400, 800, 1200, 1600, 2000];
 
-    throw new Error('Game board creation not yet implemented');
+    const expectedJeopardyClues = 6 * jeopardyValues.length; // 30 clues
+    const expectedDoubleJeopardyClues = 6 * doubleJeopardyValues.length; // 30 clues
+
+    // Retry logic: Keep selecting categories until we find ones with all required clues
+    const maxRetries = 50; // Prevent infinite loops
+    let jeopardyClues: Clue[] = [];
+    let doubleJeopardyClues: Clue[] = [];
+    let jeopardyCategories: string[] = [];
+    let doubleJeopardyCategories: string[] = [];
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Step 1: Select 6 unique categories for Jeopardy round
+      jeopardyCategories = await this.selectRandomCategories(
+        Round.JEOPARDY,
+        6,
+      );
+
+      // Step 2: Select 6 unique categories for Double Jeopardy round
+      doubleJeopardyCategories = await this.selectRandomCategories(
+        Round.DOUBLE_JEOPARDY,
+        6,
+      );
+
+      // Step 3: Select clues for Jeopardy round (5 clues per category)
+      jeopardyClues = [];
+      let jeopardyComplete = true;
+      for (const category of jeopardyCategories) {
+        for (const value of jeopardyValues) {
+          const clue = await this.selectClueForCategoryAndValue(
+            Round.JEOPARDY,
+            category,
+            value,
+          );
+          if (clue) {
+            jeopardyClues.push(clue);
+          } else {
+            jeopardyComplete = false;
+            break;
+          }
+        }
+        if (!jeopardyComplete) break;
+      }
+
+      // Step 4: Select clues for Double Jeopardy round (5 clues per category)
+      doubleJeopardyClues = [];
+      let doubleJeopardyComplete = true;
+      for (const category of doubleJeopardyCategories) {
+        for (const value of doubleJeopardyValues) {
+          const clue = await this.selectClueForCategoryAndValue(
+            Round.DOUBLE_JEOPARDY,
+            category,
+            value,
+          );
+          if (clue) {
+            doubleJeopardyClues.push(clue);
+          } else {
+            doubleJeopardyComplete = false;
+            break;
+          }
+        }
+        if (!doubleJeopardyComplete) break;
+      }
+
+      // If we found all required clues, break out of retry loop
+      if (
+        jeopardyClues.length === expectedJeopardyClues &&
+        doubleJeopardyClues.length === expectedDoubleJeopardyClues
+      ) {
+        this.logger.log(
+          `Successfully found all required clues on attempt ${attempt + 1}`,
+        );
+        break;
+      }
+
+      // Log retry attempt
+      if (attempt < maxRetries - 1) {
+        this.logger.warn(
+          `Attempt ${attempt + 1}: Missing clues. Jeopardy: ${jeopardyClues.length}/${expectedJeopardyClues}, Double Jeopardy: ${doubleJeopardyClues.length}/${expectedDoubleJeopardyClues}. Retrying with new categories...`,
+        );
+      }
+    }
+
+    // Final validation - should never reach here if database has enough clues
+    if (
+      jeopardyClues.length < expectedJeopardyClues ||
+      doubleJeopardyClues.length < expectedDoubleJeopardyClues
+    ) {
+      this.logger.error(
+        `Failed to find all required clues after ${maxRetries} attempts. Jeopardy: ${jeopardyClues.length}/${expectedJeopardyClues}, Double Jeopardy: ${doubleJeopardyClues.length}/${expectedDoubleJeopardyClues}`,
+      );
+      throw new Error(
+        `Cannot start game: Database does not have enough clues. Found ${jeopardyClues.length}/${expectedJeopardyClues} Jeopardy clues and ${doubleJeopardyClues.length}/${expectedDoubleJeopardyClues} Double Jeopardy clues after ${maxRetries} attempts. Please ensure the database has sufficient clues for all rounds.`,
+      );
+    }
+
+    // Step 5: Randomly assign 1 Daily Double in Jeopardy
+    // Rules: Must be in 3rd, 4th, or 5th position of a category (not 1st or 2nd)
+    const jeopardyDailyDoubleIndices = new Set<number>();
+    if (jeopardyClues.length === 0) {
+      this.logger.error('Cannot assign Daily Double: no Jeopardy clues available');
+      throw new Error('Cannot assign Daily Double: No Jeopardy clues available');
+    }
+    
+    // Clues are organized as: 6 categories × 5 values
+    // For each category, positions are: 0=200, 1=400, 2=600, 3=800, 4=1000
+    // Daily Double must be at position 2, 3, or 4 (3rd, 4th, or 5th clue)
+    const validJeopardyPositions: number[] = [];
+    for (let i = 0; i < jeopardyClues.length; i++) {
+      const positionInCategory = i % 5; // 0-4 for each category
+      if (positionInCategory >= 2) { // 3rd, 4th, or 5th clue (indices 2, 3, 4)
+        validJeopardyPositions.push(i);
+      }
+    }
+    
+    if (validJeopardyPositions.length === 0) {
+      throw new Error('Cannot assign Daily Double: No valid positions available (need 3rd, 4th, or 5th clue in category)');
+    }
+    
+    const dailyDoubleIndex = validJeopardyPositions[Math.floor(Math.random() * validJeopardyPositions.length)];
+    jeopardyDailyDoubleIndices.add(dailyDoubleIndex);
+    
+    const category = jeopardyClues[dailyDoubleIndex]?.category;
+    const value = jeopardyClues[dailyDoubleIndex]?.value;
+    const positionInCategory = (dailyDoubleIndex % 5) + 1; // 1-5 (human readable)
+    this.logger.log(
+      `Assigned 1 Daily Double in Jeopardy at index: ${dailyDoubleIndex} (out of ${jeopardyClues.length} clues)`,
+    );
+    this.logger.log(
+      `Jeopardy Daily Double will be: ${category} - $${value} (${positionInCategory}${positionInCategory === 1 ? 'st' : positionInCategory === 2 ? 'nd' : positionInCategory === 3 ? 'rd' : 'th'} clue in category)`,
+    );
+
+    // Step 6: Randomly assign 2 Daily Doubles in Double Jeopardy
+    // Rules: 
+    // 1. Must be in 3rd, 4th, or 5th position of a category (not 1st or 2nd)
+    // 2. Must be in different categories
+    const doubleJeopardyDailyDoubleIndices = new Set<number>();
+    if (doubleJeopardyClues.length < 2) {
+      this.logger.error(
+        `Cannot assign 2 Daily Doubles: only ${doubleJeopardyClues.length} Double Jeopardy clues available`,
+      );
+      throw new Error(
+        `Cannot assign Daily Doubles: Need at least 2 Double Jeopardy clues, but only have ${doubleJeopardyClues.length}`,
+      );
+    }
+    
+    // Find valid positions (3rd, 4th, or 5th clue in each category)
+    const validDoubleJeopardyPositions: number[] = [];
+    for (let i = 0; i < doubleJeopardyClues.length; i++) {
+      const positionInCategory = i % 5; // 0-4 for each category
+      if (positionInCategory >= 2) { // 3rd, 4th, or 5th clue (indices 2, 3, 4)
+        validDoubleJeopardyPositions.push(i);
+      }
+    }
+    
+    if (validDoubleJeopardyPositions.length < 2) {
+      throw new Error(`Cannot assign 2 Daily Doubles: Only ${validDoubleJeopardyPositions.length} valid positions available (need at least 2)`);
+    }
+    
+    // Group valid positions by category to ensure we pick from different categories
+    const positionsByCategory = new Map<string, number[]>();
+    for (const index of validDoubleJeopardyPositions) {
+      const category = doubleJeopardyClues[index]?.category;
+      if (category) {
+        if (!positionsByCategory.has(category)) {
+          positionsByCategory.set(category, []);
+        }
+        positionsByCategory.get(category)!.push(index);
+      }
+    }
+    
+    // Ensure we have at least 2 different categories
+    if (positionsByCategory.size < 2) {
+      throw new Error(`Cannot assign 2 Daily Doubles in different categories: Only ${positionsByCategory.size} category(ies) have valid positions`);
+    }
+    
+    // Select 2 Daily Doubles from different categories
+    const categories = Array.from(positionsByCategory.keys());
+    const shuffledCategories = categories.sort(() => Math.random() - 0.5);
+    
+    // Pick first Daily Double from first category
+    const firstCategoryPositions = positionsByCategory.get(shuffledCategories[0])!;
+    const firstDDIndex = firstCategoryPositions[Math.floor(Math.random() * firstCategoryPositions.length)];
+    doubleJeopardyDailyDoubleIndices.add(firstDDIndex);
+    
+    // Pick second Daily Double from a different category
+    for (let i = 1; i < shuffledCategories.length; i++) {
+      const category = shuffledCategories[i];
+      const categoryPositions = positionsByCategory.get(category)!;
+      const secondDDIndex = categoryPositions[Math.floor(Math.random() * categoryPositions.length)];
+      doubleJeopardyDailyDoubleIndices.add(secondDDIndex);
+      break; // Only need one more
+    }
+    
+    const doubleJeopardyIndicesArray = Array.from(doubleJeopardyDailyDoubleIndices);
+    this.logger.log(
+      `Assigned ${doubleJeopardyDailyDoubleIndices.size} Daily Doubles in Double Jeopardy at indices: ${doubleJeopardyIndicesArray.join(', ')} (out of ${doubleJeopardyClues.length} clues)`,
+    );
+    
+    // Verify they're in different categories
+    const selectedCategories = doubleJeopardyIndicesArray.map(idx => doubleJeopardyClues[idx]?.category);
+    const uniqueCategories = new Set(selectedCategories);
+    if (uniqueCategories.size !== 2) {
+      this.logger.error(
+        `Daily Double validation failed: Both Daily Doubles are in the same category. Categories: ${Array.from(uniqueCategories).join(', ')}`,
+      );
+      throw new Error(
+        `Daily Double assignment failed: Both Daily Doubles must be in different categories, but both are in: ${Array.from(uniqueCategories).join(', ')}`,
+      );
+    }
+    
+    doubleJeopardyIndicesArray.forEach((idx) => {
+      const category = doubleJeopardyClues[idx]?.category;
+      const value = doubleJeopardyClues[idx]?.value;
+      const positionInCategory = (idx % 5) + 1; // 1-5 (human readable)
+      this.logger.log(
+        `Double Jeopardy Daily Double ${idx + 1}: ${category} - $${value} (${positionInCategory}${positionInCategory === 1 ? 'st' : positionInCategory === 2 ? 'nd' : positionInCategory === 3 ? 'rd' : 'th'} clue in category)`,
+      );
+    });
+
+    // Validate Daily Double counts before creating GameClues
+    if (jeopardyDailyDoubleIndices.size !== 1) {
+      this.logger.error(
+        `Invalid Daily Double count for Jeopardy: expected 1, got ${jeopardyDailyDoubleIndices.size}`,
+      );
+      throw new Error(
+        `Failed to assign Daily Doubles: Jeopardy should have exactly 1, but got ${jeopardyDailyDoubleIndices.size}`,
+      );
+    }
+
+    if (doubleJeopardyDailyDoubleIndices.size !== 2) {
+      this.logger.error(
+        `Invalid Daily Double count for Double Jeopardy: expected 2, got ${doubleJeopardyDailyDoubleIndices.size}`,
+      );
+      throw new Error(
+        `Failed to assign Daily Doubles: Double Jeopardy should have exactly 2, but got ${doubleJeopardyDailyDoubleIndices.size}`,
+      );
+    }
+
+    // Step 7: Create GameClue records for all clues in a transaction
+    const updatedGame = await this.prismaService.client.$transaction(
+      async (prisma) => {
+        // Create GameClue records for Jeopardy clues
+        // IMPORTANT: Only set isDailyDouble based on our random assignment,
+        // NOT based on clue.dailyDouble from the database
+        const jeopardyGameClues = await Promise.all(
+          jeopardyClues.map((clue, index) => {
+            const isDD = jeopardyDailyDoubleIndices.has(index);
+            this.logger.log(
+              `Creating Jeopardy GameClue ${index}: ${clue.category} - $${clue.value}, isDailyDouble: ${isDD}`,
+            );
+            return prisma.gameClue.create({
+              data: {
+                gameId,
+                clueId: clue.id,
+                isDailyDouble: isDD, // Only use our assignment
+                state: ClueState.UNANSWERED,
+              },
+            });
+          }),
+        );
+
+        // Verify Jeopardy Daily Double count
+        const jeopardyDailyDoubleCount = jeopardyGameClues.filter(
+          (gc) => gc.isDailyDouble,
+        ).length;
+        if (jeopardyDailyDoubleCount !== 1) {
+          this.logger.error(
+            `Jeopardy Daily Double count mismatch: expected 1, got ${jeopardyDailyDoubleCount} in database`,
+          );
+          throw new Error(
+            `Daily Double assignment failed: Jeopardy has ${jeopardyDailyDoubleCount} instead of 1`,
+          );
+        }
+
+        // Create GameClue records for Double Jeopardy clues
+        // IMPORTANT: Only set isDailyDouble based on our random assignment,
+        // NOT based on clue.dailyDouble from the database
+        const doubleJeopardyGameClues = await Promise.all(
+          doubleJeopardyClues.map((clue, index) => {
+            const isDD = doubleJeopardyDailyDoubleIndices.has(index);
+            this.logger.log(
+              `Creating Double Jeopardy GameClue ${index}: ${clue.category} - $${clue.value}, isDailyDouble: ${isDD}`,
+            );
+            return prisma.gameClue.create({
+              data: {
+                gameId,
+                clueId: clue.id,
+                isDailyDouble: isDD, // Only use our assignment
+                state: ClueState.UNANSWERED,
+              },
+            });
+          }),
+        );
+
+        // Verify Double Jeopardy Daily Double count
+        const doubleJeopardyDailyDoubleCount = doubleJeopardyGameClues.filter(
+          (gc) => gc.isDailyDouble,
+        ).length;
+        if (doubleJeopardyDailyDoubleCount !== 2) {
+          this.logger.error(
+            `Double Jeopardy Daily Double count mismatch: expected 2, got ${doubleJeopardyDailyDoubleCount} in database`,
+          );
+          throw new Error(
+            `Daily Double assignment failed: Double Jeopardy has ${doubleJeopardyDailyDoubleCount} instead of 2`,
+          );
+        }
+
+        // Step 8: Transition game state to ACTIVE
+        const game = await prisma.game.update({
+          where: { id: gameId },
+          data: { state: GameState.ACTIVE },
+        });
+
+        return game;
+      },
+    );
+
+    // Final verification: Query the database to ensure Daily Double counts are correct
+    const allGameClues = await this.prismaService.client.gameClue.findMany({
+      where: { gameId },
+      include: { clue: true },
+    });
+
+    const jeopardyDDCount = allGameClues.filter(
+      (gc) => gc.clue.round === Round.JEOPARDY && gc.isDailyDouble,
+    ).length;
+    const doubleJeopardyDDCount = allGameClues.filter(
+      (gc) => gc.clue.round === Round.DOUBLE_JEOPARDY && gc.isDailyDouble,
+    ).length;
+
+    if (jeopardyDDCount !== 1) {
+      this.logger.error(
+        `Final verification failed: Jeopardy has ${jeopardyDDCount} Daily Doubles instead of 1`,
+      );
+      throw new Error(
+        `Daily Double verification failed: Jeopardy has ${jeopardyDDCount} Daily Doubles instead of 1`,
+      );
+    }
+
+    if (doubleJeopardyDDCount !== 2) {
+      this.logger.error(
+        `Final verification failed: Double Jeopardy has ${doubleJeopardyDDCount} Daily Doubles instead of 2`,
+      );
+      throw new Error(
+        `Daily Double verification failed: Double Jeopardy has ${doubleJeopardyDDCount} Daily Doubles instead of 2`,
+      );
+    }
+
+    this.logger.log(
+      `Game ${gameId} started successfully with ${jeopardyDDCount} Jeopardy and ${doubleJeopardyDDCount} Double Jeopardy Daily Doubles`,
+    );
+    return updatedGame;
+  }
+
+  /**
+   * Select random unique categories for a round
+   */
+  private async selectRandomCategories(
+    round: Round,
+    count: number,
+  ): Promise<string[]> {
+    const categories = await this.prismaService.client.clue.findMany({
+      where: { round },
+      select: { category: true },
+      distinct: ['category'],
+    });
+
+    if (categories.length < count) {
+      throw new Error(
+        `Not enough categories available for ${round} round. Found ${categories.length}, need ${count}`,
+      );
+    }
+
+    // Shuffle and select
+    const shuffled = categories.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count).map((c) => c.category);
+  }
+
+  /**
+   * Select a clue for a specific category and value
+   * Prefers clues that are not marked as Daily Doubles in the database
+   * to ensure we have full control over Daily Double assignment per game.
+   * Falls back to Daily Double clues if no non-Daily Double clues are available.
+   */
+  private async selectClueForCategoryAndValue(
+    round: Round,
+    category: string,
+    value: number,
+  ): Promise<Clue | null> {
+    // First, try to find clues that are NOT marked as Daily Doubles
+    let clues = await this.prismaService.client.clue.findMany({
+      where: {
+        round,
+        category,
+        value,
+        dailyDouble: false,
+      },
+    });
+
+    // If no non-Daily Double clues found, fall back to Daily Double clues
+    // This ensures we can still create games even if some category/value combos
+    // only have Daily Double clues in the database
+    if (clues.length === 0) {
+      this.logger.warn(
+        `No non-Daily Double clues found for ${round} round, category "${category}", value ${value}. Falling back to Daily Double clues.`,
+      );
+      clues = await this.prismaService.client.clue.findMany({
+        where: {
+          round,
+          category,
+          value,
+          dailyDouble: true,
+        },
+      });
+    }
+
+    if (clues.length === 0) {
+      this.logger.error(
+        `No clues found for ${round} round, category "${category}", value ${value}`,
+      );
+      return null;
+    }
+
+    // Randomly select one clue
+    const randomIndex = Math.floor(Math.random() * clues.length);
+    return clues[randomIndex];
   }
 
   /**
@@ -409,7 +831,7 @@ export class GameService {
           clueId: gc.clueId,
           value: gc.clue.value,
           state: gc.state as 'UNANSWERED' | 'ANSWERED' | 'RESOLVED',
-          dailyDouble: gc.isDailyDouble || gc.clue.dailyDouble,
+          dailyDouble: gc.isDailyDouble, // Only use GameClue's isDailyDouble for per-game control
           question: gc.state !== ClueState.UNANSWERED ? gc.clue.question : undefined,
           answer: gc.state === ClueState.RESOLVED ? gc.clue.answer : undefined,
           wager: gc.wager ?? undefined,
@@ -499,12 +921,21 @@ export class GameService {
     // Calculate score delta
     // For Daily Doubles: use wager amount (required)
     // For regular clues: use clue value
+    if (isDailyDouble && gameClue.wager === null) {
+      this.logger.error(
+        `Daily Double clue ${clueId} has no wager. GameClue state: ${gameClue.state}, isDailyDouble: ${gameClue.isDailyDouble}`,
+      );
+      throw new Error('Daily Double wager is required');
+    }
+    
     const baseValue = isDailyDouble
-      ? (gameClue.wager ?? gameClue.clue.value)
+      ? (gameClue.wager as number) // Cast to number since we've validated it's not null
       : gameClue.clue.value;
     
-    if (isDailyDouble && gameClue.wager === null) {
-      throw new Error('Daily Double wager is required');
+    if (isDailyDouble) {
+      this.logger.log(
+        `Daily Double answered: wager=${gameClue.wager}, baseValue=${baseValue}, correct=${correct}`,
+      );
     }
     
     const scoreDelta = correct ? baseValue : -baseValue;
@@ -616,8 +1047,8 @@ export class GameService {
       throw new Error('Clue does not belong to this game');
     }
 
-    // Verify clue is a Daily Double
-    if (!gameClue.isDailyDouble && !gameClue.clue.dailyDouble) {
+    // Verify clue is a Daily Double (only check GameClue's isDailyDouble for per-game control)
+    if (!gameClue.isDailyDouble) {
       throw new Error('This clue is not a Daily Double');
     }
 
@@ -778,5 +1209,37 @@ export class GameService {
       finalJeopardy: result.finalJeopardy,
       finalScore,
     };
+  }
+
+  /**
+   * End/abandon a game that is in progress
+   * @param gameId - Game ID
+   * @param userId - User ID for authorization
+   * @returns Updated game
+   */
+  async endGame(gameId: string, userId: string): Promise<Game> {
+    const game = await this.getGameById(gameId, userId);
+    if (!game) {
+      throw new Error('Game not found or access denied');
+    }
+
+    // Only allow ending games that are in progress
+    if (
+      game.state === GameState.COMPLETED ||
+      game.state === GameState.ELIMINATED
+    ) {
+      throw new Error(`Game is already ${game.state}`);
+    }
+
+    // Transition to ELIMINATED state (abandoned game)
+    const updatedGame = await this.prismaService.client.game.update({
+      where: { id: gameId },
+      data: { state: GameState.ELIMINATED },
+    });
+
+    // Update user statistics for abandoned game (use current score as final score)
+    await this.userService.updateUserStatsOnGameComplete(userId, game.score);
+
+    return updatedGame;
   }
 }

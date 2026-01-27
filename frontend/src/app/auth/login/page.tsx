@@ -141,7 +141,13 @@ export default function LoginPage() {
           borderColor: '#00188C',
         }}
       >
-        <h1 className="text-3xl font-bold text-center mb-8 text-white">Trivia Master</h1>
+        <div className="flex justify-center mb-8">
+          <img 
+            src="/trivia_master.png" 
+            alt="Trivia Master" 
+            className="max-w-[200px] w-full h-auto"
+          />
+        </div>
         <p className="text-white opacity-80 text-center mb-6">
           {mode === 'signIn' ? 'Sign in to start playing' : 'Create an account to start playing'}
         </p>

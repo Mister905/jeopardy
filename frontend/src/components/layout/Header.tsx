@@ -32,8 +32,13 @@ export function Header() {
   return (
     <header className="text-white shadow-lg" style={{ backgroundColor: '#001AA5' }}>
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <Link href="/" className="text-2xl font-bold">
-          Trivia Master
+        <Link href="/" className="flex items-center">
+          <img 
+            src="/trivia_master_header.png" 
+            alt="Trivia Master" 
+            className="w-auto"
+            style={{ height: '3.5rem' }}
+          />
         </Link>
         <nav className="flex items-center gap-4">
           {loading ? (

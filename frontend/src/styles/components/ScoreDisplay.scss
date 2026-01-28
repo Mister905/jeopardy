@@ -1,0 +1,25 @@
+@use '../variables' as *;
+
+.score-display {
+  font-weight: bold;
+
+  &--inline {
+    font-weight: bold;
+  }
+
+  &:not(.score-display--inline) {
+    font-size: 1.5rem;
+  }
+}
+
+.score-display--negative {
+  color: $color-negative;
+}
+
+.score-display--white {
+  color: white;
+}
+
+.score-display--positive {
+  color: #16a34a;
+}

@@ -1,0 +1,41 @@
+@use '../variables' as *;
+
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+  color: white;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn--primary {
+  background-color: $color-primary;
+  border: 2px solid $color-border;
+
+  &:hover:not(:disabled) {
+    background-color: $color-primary-dark;
+  }
+}
+
+.btn--secondary {
+  background-color: $color-primary-nav;
+  border: 2px solid $color-border;
+
+  &:hover:not(:disabled) {
+    background-color: $color-primary-nav-hover;
+  }
+}
+
+.btn--danger {
+  background-color: #dc2626;
+  border: 2px solid $color-border;
+
+  &:hover:not(:disabled) {
+    background-color: #b91c1c;
+  }
+}

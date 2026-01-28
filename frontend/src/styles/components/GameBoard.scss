@@ -1,0 +1,11 @@
+@use '../variables' as *;
+
+.game-board {
+  border: 2px solid $color-border;
+  background-color: $color-board-bg;
+
+  .game-board__category {
+    background-color: $color-primary;
+    border: 2px solid $color-border;
+  }
+}

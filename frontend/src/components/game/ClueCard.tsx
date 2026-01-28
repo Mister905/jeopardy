@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { ClueBoardItem } from '@/lib/api/types';
+import '@/styles/components/ClueCard.scss';
 
 interface ClueCardProps {
   clue: ClueBoardItem;
@@ -25,25 +26,10 @@ export function ClueCard({ clue, onClick, disabled }: ClueCardProps) {
     <button
       onClick={onClick}
       disabled={disabled || isAnswered}
-      className="w-full h-20 flex items-center justify-center border-2 font-bold text-lg transition-all text-white cursor-pointer"
-      style={{
-        backgroundColor: '#001AA5',
-        borderColor: '#3F3A3E',
-        borderRadius: '2px',
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled && !isAnswered) {
-          e.currentTarget.style.backgroundColor = '#00188C';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!disabled && !isAnswered) {
-          e.currentTarget.style.backgroundColor = '#001AA5';
-        }
-      }}
+      className={`clue-card w-full h-20 flex items-center justify-center border-2 font-bold text-lg transition-all text-white cursor-pointer ${isAnswered ? 'clue-card--answered' : ''}`}
     >
       {isUnanswered ? (
-        <span style={{ color: '#EAAB66' }}>{formatValue(clue.value)}</span>
+        <span className="clue-card__value">{formatValue(clue.value)}</span>
       ) : (
         // When answered, show nothing - just the background color
         // Same as a regular active clue button, only without any text

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
+import '@/styles/components/WagerInput.scss';
 
 interface WagerInputProps {
   minWager: number;
@@ -121,11 +122,7 @@ export function WagerInput({
           max={maxWager}
           value={wager}
           onChange={(e) => handleWagerChange(e.target.value)}
-          className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
-          style={{
-            border: '2px solid #3F3A3E',
-            backgroundColor: 'white',
-          }}
+          className="wager-input__field w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
           disabled={loading}
         />
       </div>

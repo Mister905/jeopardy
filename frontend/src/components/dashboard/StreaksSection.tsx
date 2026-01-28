@@ -1,4 +1,5 @@
 import type { UserStats } from '@/lib/api/types';
+import '@/styles/components/DashboardSection.scss';
 
 interface StreaksSectionProps {
   stats: UserStats;
@@ -6,7 +7,7 @@ interface StreaksSectionProps {
 
 export function StreaksSection({ stats }: StreaksSectionProps) {
   return (
-    <section className="mb-8 p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C' }}>
+    <section className="dashboard-section dashboard-section--streaks">
       <h2 className="text-2xl font-bold mb-4 text-white">Streaks</h2>
       <div className="grid grid-cols-2 gap-4">
         <div>

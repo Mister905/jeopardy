@@ -1,0 +1,6 @@
+@use '../variables' as *;
+
+.wager-input__field {
+  border: 2px solid $color-border;
+  background-color: $color-input-bg;
+}

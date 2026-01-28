@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
+import '@/styles/components/LoginPage.scss';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAuth } from '@/lib/auth/hooks';
@@ -134,13 +135,7 @@ export default function LoginPage() {
 
   return (
     <div className="max-w-md mx-auto mt-12">
-      <div
-        className="rounded-lg shadow-lg p-8 border-2"
-        style={{
-          backgroundColor: 'rgba(0, 26, 165, 0.3)',
-          borderColor: '#00188C',
-        }}
-      >
+      <div className="login-card rounded-lg shadow-lg p-8 border-2">
         <div className="flex justify-center mb-8">
           <img 
             src="/trivia_master.png" 
@@ -159,14 +154,7 @@ export default function LoginPage() {
         )}
 
         {signUpSuccess && signUpMessage && (
-          <div
-            className="mb-4 px-4 py-3 rounded border-2"
-            style={{
-              backgroundColor: 'rgba(34, 197, 94, 0.2)',
-              borderColor: '#22c55e',
-              color: 'white',
-            }}
-          >
+          <div className="login-success-banner mb-4 px-4 py-3 rounded border-2">
             <p>{signUpMessage}</p>
             <Button
               onClick={handleModeToggle}
@@ -191,11 +179,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
-                style={{
-                  border: '2px solid #3F3A3E',
-                  backgroundColor: 'white',
-                }}
+                className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
                 placeholder="your@email.com"
               />
             </div>
@@ -214,11 +198,7 @@ export default function LoginPage() {
                   disabled={loading}
                   minLength={3}
                   maxLength={50}
-                  className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
-                  style={{
-                    border: '2px solid #3F3A3E',
-                    backgroundColor: 'white',
-                  }}
+                  className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
                   placeholder="Choose a username"
                 />
                 <p className="mt-1 text-xs text-white opacity-70">
@@ -239,11 +219,7 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 minLength={6}
-                className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
-                style={{
-                  border: '2px solid #3F3A3E',
-                  backgroundColor: 'white',
-                }}
+                className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
                 placeholder={mode === 'signUp' ? 'At least 6 characters' : ''}
               />
               {mode === 'signUp' && (
@@ -269,11 +245,7 @@ export default function LoginPage() {
                   required
                   disabled={loading}
                   minLength={6}
-                  className="w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
-                  style={{
-                    border: '2px solid #3F3A3E',
-                    backgroundColor: 'white',
-                  }}
+                  className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
                   placeholder="Confirm your password"
                 />
               </div>

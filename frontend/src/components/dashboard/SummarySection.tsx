@@ -1,4 +1,5 @@
 import type { UserStats } from '@/lib/api/types';
+import '@/styles/components/DashboardSection.scss';
 
 interface SummarySectionProps {
   stats: UserStats;
@@ -11,7 +12,7 @@ function formatCurrency(value: number | null): string {
 
 export function SummarySection({ stats }: SummarySectionProps) {
   return (
-    <section className="mb-8 p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C' }}>
+    <section className="dashboard-section dashboard-section--summary">
       <h2 className="text-2xl font-bold mb-4 text-white">Summary</h2>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div>

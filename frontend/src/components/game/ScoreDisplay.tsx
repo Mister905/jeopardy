@@ -1,4 +1,5 @@
 import React from 'react';
+import '@/styles/components/ScoreDisplay.scss';
 
 interface ScoreDisplayProps {
   score: number;
@@ -17,27 +18,20 @@ export function ScoreDisplay({ score, className = '' }: ScoreDisplayProps) {
 
   const isInline = className.includes('inline');
   const forceWhite = className.includes('text-white');
-  
-  // Use red for negative scores, even if text-white is in className
-  // Otherwise use white if explicitly requested, or conditional colors
+
   const colorClass = isNegative
-    ? '' // Will use inline style for red
-    : forceWhite 
-      ? 'text-white' 
-      : isZero ? 'text-white' : 'text-green-600';
-  
-  // Inline style for negative scores (red)
-  const inlineStyle = isNegative ? { color: '#D20422' } : {};
-  
-  // Use span for inline usage (e.g., inside <p> tags), div for block usage
+    ? 'score-display--negative'
+    : forceWhite
+      ? 'score-display--white'
+      : isZero
+        ? 'score-display--white'
+        : 'score-display--positive';
+
   const Component = isInline ? 'span' : 'div';
-  const baseClasses = isInline ? 'font-bold' : 'text-2xl font-bold';
+  const baseClasses = isInline ? 'score-display score-display--inline' : 'score-display';
 
   return (
-    <Component
-      className={`${baseClasses} ${colorClass} ${className}`}
-      style={inlineStyle}
-    >
+    <Component className={`${baseClasses} ${colorClass} ${className}`.trim()}>
       {formattedScore}
     </Component>
   );

@@ -1,0 +1,17 @@
+@use '../variables' as *;
+
+.login-card {
+  background-color: $color-primary-translucent;
+  border: 2px solid $color-border-section;
+}
+
+.login-success-banner {
+  background-color: $color-success-bg;
+  border: 2px solid $color-success;
+  color: white;
+}
+
+.login-input {
+  border: 2px solid $color-border;
+  background-color: $color-input-bg;
+}

@@ -1,0 +1,22 @@
+@use '../variables' as *;
+
+.game-detail-score-box {
+  background-color: $color-primary;
+  border: 2px solid $color-border;
+}
+
+.game-detail-pending-card {
+  background-color: $color-primary-translucent;
+  border: 2px solid $color-border-section;
+  color: white;
+}
+
+.game-detail-modal-overlay {
+  background-color: $color-primary-translucent-95;
+  border: 2px solid $color-border-section;
+  color: white;
+}
+
+.game-detail-clue-value {
+  color: $color-clue-value;
+}

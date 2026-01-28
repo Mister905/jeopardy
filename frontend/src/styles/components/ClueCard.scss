@@ -1,0 +1,15 @@
+@use '../variables' as *;
+
+.clue-card {
+  background-color: $color-primary;
+  border: 2px solid $color-border;
+  border-radius: 2px;
+
+  &:hover:not(:disabled):not(.clue-card--answered) {
+    background-color: $color-primary-dark;
+  }
+
+  .clue-card__value {
+    color: $color-clue-value;
+  }
+}

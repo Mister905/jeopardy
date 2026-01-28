@@ -1,0 +1,30 @@
+@use '../variables' as *;
+
+.game-card {
+  background-color: $color-primary-translucent;
+  border: 2px solid $color-border;
+  color: white;
+
+  .game-card__badge--active {
+    background-color: $color-primary;
+    border: 2px solid $color-border;
+  }
+
+  .game-card__divider {
+    border-color: $color-border-section;
+  }
+
+  .game-card__cancel-btn,
+  .game-card__resume-link {
+    background-color: $color-primary-nav;
+    border-color: $color-border-section;
+
+    &:hover {
+      background-color: $color-primary-nav-hover;
+    }
+  }
+
+  .game-card__resume-link {
+    border: 2px solid $color-border;
+  }
+}

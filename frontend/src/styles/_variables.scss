@@ -1,0 +1,38 @@
+// Colors - primary palette
+$color-primary: #001aa5;
+$color-primary-dark: #00188c;
+$color-primary-translucent: rgba(0, 26, 165, 0.3);
+$color-primary-translucent-95: rgba(0, 26, 165, 0.95);
+$color-primary-nav: rgba(0, 24, 140, 0.4);
+$color-primary-nav-hover: rgba(0, 24, 140, 0.6);
+
+// Borders and neutrals
+$color-border: #3f3a3e;
+$color-border-section: #00188c;
+$color-board-bg: #081856;
+
+// Accent
+$color-clue-value: #eaab66;
+$color-cyan: #00b4d8;
+$color-cyan-hover: #0096c7;
+$color-success: #22c55e;
+$color-success-bg: rgba(34, 197, 94, 0.2);
+$color-negative: #d20422;
+
+// Backgrounds
+$color-page-gradient-start: #2a1f5c;
+$color-page-gradient-end: #1a1442;
+$color-input-bg: white;
+
+// Spacing
+$spacing-section: 1.5rem;
+$spacing-card: 1rem;
+$header-logo-height: 3.5rem;
+
+// Typography
+$font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+
+// Breakpoints (for mixins)
+$bp-md: 768px;
+$bp-lg: 1024px;

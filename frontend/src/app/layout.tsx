@@ -5,6 +5,7 @@ import { store } from '@/store/store';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import './globals.css';
+import '@/styles/main.scss';
 
 // Note: Metadata cannot be exported from client components in Next.js App Router.
 // Individual pages can use next/head or metadata will be handled via document title.
@@ -18,12 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body 
-        className="min-h-screen flex flex-col" 
-        style={{ 
-          background: 'linear-gradient(to bottom, #2a1f5c 0%, #1a1442 100%)',
-        }}
-      >
+      <body className="app-root">
         <Provider store={store}>
           <Header />
           <main className="flex-grow container mx-auto px-4 py-8">

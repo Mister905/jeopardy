@@ -1,0 +1,9 @@
+@use '../variables' as *;
+
+.dashboard-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  border: 2px solid $color-border-section;
+  background-color: $color-primary-translucent;
+}

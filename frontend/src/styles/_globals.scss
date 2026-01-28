@@ -1,0 +1,17 @@
+@use 'variables' as *;
+
+// Base resets and typography (Tailwind handles additional resets via @tailwind base)
+body {
+  margin: 0;
+  font-family: $font-family-base;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Layout root class (used by layout.tsx body)
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(to bottom, $color-page-gradient-start 0%, $color-page-gradient-end 100%);
+}

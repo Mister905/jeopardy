@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Button } from '../ui/Button';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getGame } from '@/lib/api/games';
+import '@/styles/components/AnswerAdjudication.scss';
 
 interface AnswerAdjudicationProps {
   question: string;
@@ -128,7 +129,7 @@ export function AnswerAdjudication({
   };
 
   return (
-    <div className="space-y-4 p-6 rounded-lg" style={{ backgroundColor: 'rgba(0, 24, 140, 0.3)', border: '2px solid #00188C' }}>
+    <div className="answer-adjudication space-y-4 p-6 rounded-lg">
       <div>
         <p className="text-white text-center text-lg leading-relaxed">{question}</p>
       </div>
@@ -148,7 +149,7 @@ export function AnswerAdjudication({
       )}
 
       {!showAnswer && (
-        <div style={{ marginTop: '3rem' }}>
+        <div className="answer-adjudication__show-answer-spacer">
           <Button
             className="w-full"
             onClick={() => {
@@ -225,19 +226,7 @@ export function AnswerAdjudication({
               <Button
                 onClick={() => handleAnswer(true)}
                 disabled={loading || submitting}
-                className="flex-1"
-                style={{
-                  backgroundColor: '#00B4D8',
-                  border: '2px solid #3F3A3E',
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && !submitting) {
-                    e.currentTarget.style.backgroundColor = '#0096C7';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#00B4D8';
-                }}
+                className="answer-adjudication__correct-btn flex-1"
               >
                 I got it right
               </Button>

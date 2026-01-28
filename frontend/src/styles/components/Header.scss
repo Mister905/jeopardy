@@ -1,0 +1,29 @@
+@use '../variables' as *;
+
+.header {
+  color: white;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  background-color: $color-primary;
+
+  .header__logo {
+    height: $header-logo-height;
+    width: auto;
+  }
+
+  .header__nav-link {
+    border: 2px solid $color-border;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+
+  .header__logout-btn {
+    background-color: $color-primary-nav;
+    border: 2px solid $color-border;
+
+    &:hover:not(:disabled) {
+      background-color: $color-primary-nav-hover;
+    }
+  }
+}

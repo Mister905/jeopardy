@@ -1,0 +1,16 @@
+@use '../variables' as *;
+
+.game-list__create-btn {
+  background-color: $color-primary;
+  border: 2px solid $color-border;
+
+  &:hover:not(:disabled) {
+    background-color: $color-primary-dark;
+  }
+}
+
+.game-list__new-game-btn {
+  background-color: $color-primary;
+  border: 2px solid $color-border;
+  color: white;
+}

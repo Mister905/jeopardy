@@ -27,6 +27,7 @@ import { WagerInput } from '@/components/game/WagerInput';
 import { createGame } from '@/lib/api/games';
 import { getUserDashboard } from '@/lib/api/user';
 import type { JeopardyBoard } from '@/lib/api/types';
+import '@/styles/components/GameDetailPage.scss';
 
 // Mark as dynamic to prevent static generation
 export const dynamic = 'force-dynamic';
@@ -206,14 +207,7 @@ export default function GameDetailPage() {
         game.state === 'FINAL_PENDING' ||
         game.state === 'FINAL_ACTIVE') && (
         <div className="w-full flex justify-center">
-          <div 
-            className="h-20 flex items-center justify-center rounded-lg border-2 text-white font-bold text-lg"
-            style={{
-              backgroundColor: '#001AA5',
-              borderColor: '#3F3A3E',
-              width: '159px', // Match the width of a clue card
-            }}
-          >
+          <div className="game-detail-score-box h-20 flex items-center justify-center rounded-lg border-2 text-white font-bold text-lg w-[159px]">
             <ScoreDisplay score={game.score} className="text-white" />
           </div>
         </div>
@@ -230,7 +224,7 @@ export default function GameDetailPage() {
 
       {/* PENDING State */}
       {game.state === 'PENDING' && (
-        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
+        <div className="game-detail-pending-card p-6 rounded-lg border-2">
           {actionLoading ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh]">
               <LoadingSpinner size="lg" />
@@ -350,14 +344,7 @@ export default function GameDetailPage() {
 
       {/* COMPLETED/ELIMINATED States */}
       {(game.state === 'COMPLETED' || game.state === 'ELIMINATED') && (
-        <div 
-          className="p-6 rounded-lg border-2"
-          style={{
-            backgroundColor: 'rgba(0, 26, 165, 0.3)',
-            borderColor: '#00188C',
-            color: 'white',
-          }}
-        >
+        <div className="game-detail-pending-card p-6 rounded-lg border-2">
           <h2 className="text-2xl font-bold mb-4 text-center">
             {game.state === 'COMPLETED' ? 'Game Completed!' : 'Game Over'}
           </h2>
@@ -413,7 +400,7 @@ export default function GameDetailPage() {
       {/* Selected Clue Modal/View */}
       {selectedClue && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-10 border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.95)', borderColor: '#00188C', color: 'white' }}>
+          <div className="game-detail-modal-overlay rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-10 border-2">
             {!selectedClue.isDailyDouble && (
               <h3 className="text-2xl font-bold text-center text-white mb-4">
                 {selectedClue.category || 'Clue'}
@@ -509,7 +496,7 @@ export default function GameDetailPage() {
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold mb-2">Question:</h4>
-                  <p style={{ color: '#EAAB66' }}>{selectedClue.question}</p>
+                  <p className="game-detail-clue-value">{selectedClue.question}</p>
                 </div>
                 {selectedClue.answer && (
                   <div>

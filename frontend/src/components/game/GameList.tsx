@@ -5,6 +5,7 @@ import { GameCard } from './GameCard';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ErrorDisplay } from '../ui/ErrorDisplay';
 import type { ListGamesResponse } from '@/lib/api/types';
+import '@/styles/components/GameList.scss';
 
 interface GameListProps {
   data: ListGamesResponse | null;
@@ -54,21 +55,7 @@ export function GameList({
         <button
           onClick={onCreateGame}
           disabled={creatingGame}
-          className="px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
-          style={{
-            backgroundColor: '#001AA5',
-            borderColor: '#3F3A3E',
-          }}
-          onMouseEnter={(e) => {
-            if (!creatingGame) {
-              e.currentTarget.style.backgroundColor = '#00188C';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!creatingGame) {
-              e.currentTarget.style.backgroundColor = '#001AA5';
-            }
-          }}
+          className="game-list__create-btn px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
         >
           {creatingGame ? 'Creating...' : 'Create New Game'}
         </button>
@@ -83,12 +70,7 @@ export function GameList({
           <button
             onClick={onCreateGame}
             disabled={creatingGame}
-            className="px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"
-            style={{
-              backgroundColor: '#001AA5',
-              borderColor: '#3F3A3E',
-              color: 'white',
-            }}
+            className="game-list__new-game-btn px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"
           >
             {creatingGame ? 'Creating...' : 'New Game'}
           </button>

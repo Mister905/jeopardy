@@ -10,9 +10,11 @@ The plan assumes:
 - A thin frontend client
 - Deterministic, testable system behavior
 
+**Checkpoint rule:** After every 2–3 phases, the following must be answered: *Can a human complete a meaningful task?* If not, the roadmap must not advance. Do not proceed until the checkpoint is satisfied.
+
 ---
 
-## Phase 1: Project & Infrastructure Setup
+## Phase 1: Project and Infrastructure Setup
 
 - Initialize frontend and backend projects using the chosen frameworks.
 - Install and configure core tooling:
@@ -24,8 +26,7 @@ The plan assumes:
 - Run initial migrations.
 - Verify database tables, constraints, and relationships match the schema exactly.
 
-**Exit condition:**
-The system builds, connects to the database, and the schema matches the design with no warnings or drift.
+**Exit condition:** The system builds, connects to the database, and the schema matches the design with no warnings or drift.
 
 ---
 
@@ -40,12 +41,71 @@ The system builds, connects to the database, and the schema matches the design w
 - Persist all authoritative state changes.
 - Do not implement API controllers or UI logic yet.
 
-**Exit condition:**
-All rules described in business_rules.md can be enforced via domain services alone.
+**Exit condition:** All rules described in business_rules.md can be enforced via domain services alone.
 
 ---
 
-## Phase 3: Raw Final Jeopardy File Parsing
+## Phase 3: Minimal Clue Data for Gameplay
+
+- Provide just enough clue data to support one playable game round.
+- Options (choose one and lock):
+  - Seed a small set of clues via migration or script
+  - Parse a minimal subset of raw files and ingest only what is needed for one round
+- Persist clues with correct round, category, value, question, and answer.
+- Ensure the backend can create a game and serve at least one full round of clues.
+- Data ingestion in this phase exists only to support gameplay; do not expand the dataset beyond what is required.
+
+**Exit condition:** A game can be created and populated with enough clues for a human to play one full round. No placeholder or mocked clue content.
+
+**Checkpoint:** Can a human complete a meaningful task? (Not yet—no UI. Checkpoint satisfied once Phase 6 is complete.)
+
+---
+
+## Phase 4: Authentication (Essential)
+
+- Implement sign-up and sign-in using Supabase Auth.
+- Configure Supabase client, JWT verification, and extraction of user identity from tokens.
+- Ensure userId from the JWT is passed to domain services for entity creation and queries.
+- Protect game-related endpoints: require valid Supabase JWT and enforce that users can access only their own games.
+- Implement only what is needed for the playable loop: sign up, sign in, token validation, and userId propagation. Defer advanced auth features (e.g. roles, password reset flows) until after the core gameplay loop is complete.
+
+**Exit condition:** A user can sign up and sign in; all protected endpoints require a valid JWT and use the authenticated userId; ownership checks prevent access to other users’ games.
+
+---
+
+## Phase 5: API Contracts and Endpoints
+
+- Implement API endpoints according to the locked interface contract for the core gameplay loop:
+  - Create game, start game, fetch game and board
+  - Select clue, submit answer, receive score update
+- Include input validation, authorization checks, state enforcement, and structured error handling.
+- Keep endpoints thin: no duplicated business logic; all rules delegated to domain services.
+- Integrate authentication guards from Phase 4.
+
+**Exit condition:** All operations required for the playable game loop (create game, start game, see clues, answer clues, get score) are available via the API and behave correctly. API responses are the single source of truth for state.
+
+---
+
+## Phase 6: Vertical Slice — Playable Game Loop
+
+- Deliver a single, end-to-end flow that a human can use without placeholders or mocks.
+- The user must be able to:
+  - Sign up or sign in
+  - Start a game
+  - See a clue (question and value)
+  - Answer a clue (correct or incorrect)
+  - Receive score feedback (updated score visible after answering)
+- The UI may be minimal (e.g. simple forms, basic layout, no polish) but must be fully functional.
+- All interactions must call real APIs and display real backend state. No mocked responses, no stub flows, no “coming soon” steps in this path.
+- Frontend must remain thin: no client-side business rules; display and actions driven by API responses.
+
+**Exit condition (human-usable):** A new user can sign up, sign in, start a game, see at least one clue, answer it, and see their score update correctly. The full loop completes without errors. If this cannot be demonstrated, the phase is not complete and the roadmap must not advance.
+
+**Checkpoint:** Can a human complete a meaningful task? Yes—completing one round of play with real sign-in, clues, and score. Do not proceed to Phase 7 until this is true.
+
+---
+
+## Phase 7: Raw Final Jeopardy File Parsing
 
 - Implement a local parsing service for raw clue files:
   - Read all files from `backend/data/jeopardy_clue_dataset/raw`
@@ -55,136 +115,57 @@ All rules described in business_rules.md can be enforced via domain services alo
 - Write cleaned, normalized data to `backend/data/jeopardy_clue_dataset/parsed`
 - Log parsing results and flag any malformed or duplicate rows
 
-**Exit condition:**
-- All raw files are processed
-- Only valid Final Jeopardy clues exist in `parsed/`
-- Dataset is ready for ingestion into the database in the next phase
+**Exit condition:** All raw files are processed; only valid Final Jeopardy clues exist in `parsed/`; dataset is ready for ingestion in the next phase.
 
 ---
 
-## Phase 4: Final Jeopardy Ingestion & Normalization
+## Phase 8: Final Jeopardy Ingestion and Normalization
 
 - Implement database ingestion service:
   - Read cleaned clues from `backend/data/jeopardy_clue_dataset/parsed`
-  - Persist Final Jeopardy clues to the database:
-    - Store with `round = FINAL` in the Clue table
-    - Set appropriate category
-    - Ensure clues are immutable after creation
-    - Deduplicate identical clues
-- Validate the dataset:
-  - Ensure sufficient number of clues exist for game creation
-  - Allow querying by category if needed
-- Add error handling and logging
+  - Persist Final Jeopardy clues to the database with `round = FINAL`, correct category, and immutable semantics
+  - Deduplicate identical clues
+- Validate the dataset: ensure sufficient clues exist for game creation; support querying by category if needed.
+- Add error handling and logging.
 
-**Exit condition:**
-- All parsed Final Jeopardy clues are ingested into the database
-- Each clue has valid `category`, `answer`, and `question`
-- Backend can safely serve Final Jeopardy clues to the Create Game endpoint
+**Exit condition:** All parsed Final Jeopardy clues are ingested; each has valid `category`, `answer`, and `question`; the backend can serve Final Jeopardy clues to the game lifecycle. Existing playable loop from Phase 6 still works with the expanded dataset.
+
+**Checkpoint:** Can a human complete a meaningful task? Yes—playable loop still works with full Final Jeopardy data. Do not proceed to Phase 9 until this is confirmed.
 
 ---
 
-## Phase 5: Authentication
+## Phase 9: Frontend State and Integration
 
-- Implement authentication and authorization infrastructure using Supabase Auth.
-- Initialize Supabase Auth in the backend:
-  - Configure Supabase client with project credentials
-  - Set up Supabase Auth service integration
-  - Configure JWT secret and verification settings
-- Add JWT verification for all API endpoints that require authentication:
-  - Implement authentication guards using Supabase JWT verification
-  - Create middleware to validate Supabase JWT tokens
-  - Extract user identity from verified JWT tokens
-- Ensure that userId from the JWT is used to associate game objects and other domain entities:
-  - Extract userId from Supabase JWT token claims
-  - Pass userId to domain services for entity creation and queries
-  - Associate all game objects, scores, and actions with authenticated userId
-- Include authorization checks based on roles or ownership if necessary:
-  - Verify users can only access their own games
-  - Enforce ownership-based access control for game operations
-  - Add role-based checks if multi-user or admin features are needed
-- Ensure:
-  - All protected endpoints require valid Supabase JWT tokens
-  - User identity is reliably extracted from tokens for authorization checks
-  - User context is available to domain services via authenticated userId
-  - Implementation is fully verified via unit and end-to-end tests, including:
-    - Valid, expired, and invalid JWT tokens
-    - Missing or malformed token headers
-    - Public route bypass
-    - CurrentUser extraction
-    - Logging and error handling without exposing sensitive information
+- Introduce or refine frontend state management so UI stays aligned with API state.
+- Track user interactions and current entity or workflow state.
+- Update UI strictly from API responses. Avoid client-side business rules and speculative or derived logic.
+- Extend the UI only to support flows already backed by the API (e.g. full game flow, round transitions). Do not add stats dashboards, historical views, or optimization work in this phase.
 
-**Exit condition:**
-Supabase Auth is fully integrated, tested, and functional. All protected API endpoints securely identify users via JWT verification, userId is correctly propagated to domain services, and authorization checks enforce ownership and access control. Unit and E2E tests pass for all token and authentication scenarios.
+**Exit condition (human-usable):** A new user can complete a full Jeopardy round (and, if implemented, Double Jeopardy and Final Jeopardy) without errors. All visible state (score, board, clue state) reflects backend state. No hidden or local-only rules.
 
 ---
 
-## Phase 6: API Contracts & Endpoints
+## Phase 10: Stats, Dashboards, and Historical Features
 
-- Implement API endpoints according to the locked interface contract.
-- Include:
-  - Input validation
-  - Authorization checks
-  - State enforcement
-  - Structured error handling
-- Ensure endpoints remain thin:
-  - No duplicated business logic
-  - All rules delegated to domain services
-- Integrate authentication guards from Phase 5.
+- Implement any stats dashboards, historical game lists, or user progress tracking according to the locked contract.
+- All new behavior must be backed by the backend; frontend only displays and triggers API calls.
+- This phase assumes the core gameplay loop and data ingestion are already complete and stable.
 
-**Exit condition:**
-API endpoints fully expose backend capabilities without leaking or duplicating rules.
+**Exit condition (human-usable):** A user can complete a game and see their stats or history (as specified in the contract) in the UI, with data coming from the API.
 
 ---
 
-## Phase 7: Frontend Skeleton
+## Phase 11: Testing and Validation
 
-- Build a minimal frontend layout.
-- Integrate API calls for:
-  - Creating or initializing core entities
-  - Fetching current system state
-- Render:
-  - Core data views
-  - State-driven UI (active vs inactive, enabled vs disabled)
-- Implement basic user interactions without complex client-side logic.
-
-**Exit condition:**
-The UI can render and interact with real backend state without enforcing rules locally.
-
----
-
-## Phase 8: Frontend State & Integration
-
-- Introduce frontend state management if needed.
-- Track:
-  - User interactions
-  - Current entity or workflow state
-- Update UI strictly based on API responses.
-- Explicitly avoid:
-  - Client-side business rules
-  - Derived or speculative logic
-
-**Exit condition:**
-The frontend behaves as a predictable client of the backend with no hidden logic.
-
----
-
-## Phase 9: Testing & Validation
-
-- Write backend unit tests for:
-  - Business rules
-  - State transitions
-  - Edge cases
-- Write frontend tests for:
-  - Rendering
-  - State updates
+- Write backend unit tests for business rules, state transitions, and edge cases.
+- Write frontend tests for rendering and state updates driven by API responses.
 - Add integration tests for API endpoints.
-- Validate:
-  - All documented rules
-  - All forbidden states are unreachable
-- Fix defects and apply light polish.
+- Validate that all documented rules hold and all forbidden states are unreachable.
+- Fix defects and apply light polish without introducing new hidden logic.
 
-**Exit condition:**
-All critical paths are tested and the system behaves deterministically.
+**Exit condition:** All critical paths are tested; the system behaves deterministically; a human can still complete the full playable loop and any supported stats/history flows without regression.
+
+**Checkpoint:** Can a human complete a meaningful task? Yes—full loop and any Phase 10 features remain usable and tested.
 
 ---
 
@@ -194,6 +175,7 @@ Upon completion, the system has:
 
 - A backend that fully enforces all business rules
 - A frontend that reflects backend state without duplicating logic
+- A playable game loop that was validated early (Phase 6) and never broken by later phases
 - Test coverage for critical behavior
 - A stable, explainable architecture ready for iteration
 
@@ -213,9 +195,17 @@ Early finalization prevents cascading refactors and schema drift.
 
 All authoritative state is persisted, reproducible, and auditable.
 
-### Incremental Complexity
+### Vertical Slice Before Expansion
 
-Each phase adds capability without increasing ambiguity.
+The playable game loop is delivered early (Phase 6). Data ingestion and advanced features expand a working, human-usable flow instead of building atop invisible or incomplete systems.
+
+### Human-Usable Exit Conditions
+
+Phases that introduce or change UI require exit conditions stated in terms of user actions (e.g. “A new user can complete a full round without errors”). This prevents “backend complete, UI nonfunctional” drift.
+
+### Recurring Checkpoints
+
+After every 2–3 phases, the checkpoint rule forces the question: *Can a human complete a meaningful task?* If not, the roadmap does not advance. This keeps progress visible and usable.
 
 ### Testability as a Constraint
 

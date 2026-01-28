@@ -3,6 +3,7 @@
 import React from 'react';
 import { ClueCard } from './ClueCard';
 import type { JeopardyBoard } from '@/lib/api/types';
+import '@/styles/components/GameBoard.scss';
 
 interface GameBoardProps {
   board: JeopardyBoard;
@@ -13,13 +14,7 @@ interface GameBoardProps {
 
 export function GameBoard({ board, gameId, onClueClick, username }: GameBoardProps) {
   return (
-    <div 
-      className="w-full p-4 rounded-lg"
-      style={{
-        border: '2px solid #3F3A3E',
-        backgroundColor: '#081856',
-      }}
-    >
+    <div className="game-board w-full p-4 rounded-lg">
       <h2 className="text-2xl font-bold mb-4 text-center text-white">
         {username || (board.round === 'JEOPARDY' ? 'Jeopardy!' : 'Double Jeopardy!')}
       </h2>
@@ -28,11 +23,7 @@ export function GameBoard({ board, gameId, onClueClick, username }: GameBoardPro
         {board.categories.map((category, categoryIndex) => (
           <div
             key={categoryIndex}
-            className="h-20 flex items-center justify-center text-white text-center font-bold text-sm"
-            style={{
-              backgroundColor: '#001AA5',
-              borderRadius: '2px',
-            }}
+            className="game-board__category h-20 flex items-center justify-center text-white text-center font-bold text-sm rounded-sm"
           >
             {category.name}
           </div>

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth/hooks';
 import { useAppDispatch } from '@/store/hooks';
 import { signOutUser } from '@/store/authSlice';
 import { Button } from '../ui/Button';
+import '@/styles/components/Header.scss';
 
 export function Header() {
   const { user, loading } = useAuth();
@@ -30,14 +31,13 @@ export function Header() {
   };
 
   return (
-    <header className="text-white shadow-lg" style={{ backgroundColor: '#001AA5' }}>
+    <header className="header">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center">
-          <img 
-            src="/trivia_master_header.png" 
-            alt="Trivia Master" 
-            className="w-auto"
-            style={{ height: '3.5rem' }}
+          <img
+            src="/trivia_master_header.png"
+            alt="Trivia Master"
+            className="header__logo"
           />
         </Link>
         <nav className="flex items-center gap-4">
@@ -48,10 +48,7 @@ export function Header() {
               {pathname !== '/' && (
                 <Link
                   href="/"
-                  className="hover:opacity-80 transition-colors flex items-center gap-2 px-3 py-2 rounded border-2"
-                  style={{
-                    borderColor: '#3F3A3E',
-                  }}
+                  className="header__nav-link transition-colors flex items-center gap-2 px-3 py-2 rounded border-2"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -73,10 +70,7 @@ export function Header() {
               {pathname !== '/dashboard' && (
                 <Link
                   href="/dashboard"
-                  className="hover:opacity-80 transition-colors flex items-center gap-2 px-3 py-2 rounded border-2"
-                  style={{
-                    borderColor: '#3F3A3E',
-                  }}
+                  className="header__nav-link transition-colors flex items-center gap-2 px-3 py-2 rounded border-2"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -98,19 +92,7 @@ export function Header() {
               <button
                 onClick={handleLogout}
                 disabled={signingOut}
-                className="px-4 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-2 text-white flex items-center gap-2"
-                style={{
-                  backgroundColor: 'rgba(0, 24, 140, 0.4)',
-                  borderColor: '#3F3A3E',
-                }}
-                onMouseEnter={(e) => {
-                  if (!signingOut) {
-                    e.currentTarget.style.backgroundColor = 'rgba(0, 24, 140, 0.6)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(0, 24, 140, 0.4)';
-                }}
+                className="header__logout-btn px-4 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-2 text-white flex items-center gap-2"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

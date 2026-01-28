@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { WagerInput } from './WagerInput';
 import { AnswerAdjudication } from './AnswerAdjudication';
 import type { FinalJeopardyBoard } from '@/lib/api/types';
+import '@/styles/components/FinalJeopardyView.scss';
 
 interface FinalJeopardyViewProps {
   finalJeopardy: FinalJeopardyBoard;
@@ -27,15 +28,15 @@ export function FinalJeopardyView({
   const isAnswered = clue.answeredAt !== null;
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
-      <div className="bg-blue-800 text-white p-4 rounded-lg text-center">
-        <h3 className="text-xl font-semibold">Category:</h3>
-        <p className="text-lg">{clue.category}</p>
+    <div className="final-jeopardy-view">
+      <div className="final-jeopardy-view__category">
+        <h3 className="final-jeopardy-view__category-title">Category:</h3>
+        <p className="final-jeopardy-view__category-name">{clue.category}</p>
       </div>
 
       {!hasWager ? (
-        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
-          <h3 className="text-lg font-semibold mb-4 text-white">Enter your wager:</h3>
+        <div className="final-jeopardy-card final-jeopardy-view__card">
+          <h3 className="final-jeopardy-view__card-title">Enter your wager:</h3>
           <WagerInput
             minWager={0}
             maxWager={currentScore}
@@ -55,18 +56,18 @@ export function FinalJeopardyView({
           gameId={gameId}
         />
       ) : (
-        <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
-          <div className="space-y-4">
+        <div className="final-jeopardy-card final-jeopardy-view__card">
+          <div className="final-jeopardy-view__summary">
             <div>
-              <h3 className="text-lg font-semibold mb-2 text-white">Question:</h3>
-              <p style={{ color: '#EAAB66' }}>{clue.question}</p>
+              <h3 className="final-jeopardy-view__card-title">Question:</h3>
+              <p className="final-jeopardy__question">{clue.question}</p>
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-2 text-white">Answer:</h3>
-              <p className="text-white">{clue.answer}</p>
+              <h3 className="final-jeopardy-view__card-title">Answer:</h3>
+              <p className="final-jeopardy-view__answer">{clue.answer}</p>
             </div>
-            <div className="pt-4 border-t" style={{ borderColor: '#00188C' }}>
-              <p className="text-sm text-white opacity-80">
+            <div className="final-jeopardy__divider final-jeopardy-view__meta">
+              <p className="final-jeopardy-view__meta-text">
                 Wager: ${clue.wager} |{' '}
                 {clue.correct ? 'Correct' : 'Incorrect'} | Score Change:{' '}
                 {clue.scoreDelta !== null

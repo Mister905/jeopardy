@@ -101,7 +101,7 @@ export class UserService {
         totalGamesPlayed: user.totalGamesPlayed ?? null,
         averageScore: user.averageScore ?? null,
         bestScore: user.bestScore,
-        worstScore: user.worstScore,
+        worstScore: user.worstScore ?? null,
         totalWinnings: user.totalWinnings ?? 0,
         overallAccuracy,
         correctAnswerCount: user.totalCorrectAnswers ?? null,
@@ -448,9 +448,14 @@ export class UserService {
         (currentAverageScore * currentGamesPlayed + finalScore) /
         newTotalGames;
 
+      // Ensure we have valid numbers (Prisma can fail on NaN/Infinity)
+      const safeAverageScore = Number.isFinite(newAverageScore)
+        ? Math.round(newAverageScore * 100) / 100
+        : 0;
+
       const updateData: Prisma.UserUpdateInput = {
         totalGamesPlayed: newTotalGames,
-        averageScore: newAverageScore,
+        averageScore: safeAverageScore,
       };
 
       // Update best score
@@ -458,9 +463,16 @@ export class UserService {
         updateData.bestScore = finalScore;
       }
 
-      // Update worst score
+      // Update worst score (lower is worse, so negative scores are handled correctly)
       if (user.worstScore === null || finalScore < user.worstScore) {
         updateData.worstScore = finalScore;
+        this.logger.log(
+          `Updating worst score from ${user.worstScore ?? 'null'} to ${finalScore}`,
+        );
+      } else {
+        this.logger.log(
+          `Worst score not updated: current=${user.worstScore}, final=${finalScore} (${finalScore} is not worse than ${user.worstScore})`,
+        );
       }
 
       // Update total winnings (only if positive)
@@ -474,6 +486,12 @@ export class UserService {
       }
 
       this.logger.log(`Updating user stats with: ${JSON.stringify(updateData)}`);
+      this.logger.log(`Update data keys: ${Object.keys(updateData).join(', ')}`);
+
+      if (Object.keys(updateData).length === 0) {
+        this.logger.warn(`No update data to apply for user ${userId} - this should not happen`);
+        return;
+      }
 
       const updatedUser = await this.prismaService.client.user.update({
         where: { id: userId },
@@ -481,14 +499,16 @@ export class UserService {
       });
 
       this.logger.log(
-        `Successfully updated stats - Games: ${updatedUser.totalGamesPlayed}, Avg: ${updatedUser.averageScore}`,
+        `Successfully updated stats - Games: ${updatedUser.totalGamesPlayed}, Avg: ${updatedUser.averageScore}, Best: ${updatedUser.bestScore ?? 'null'}, Worst: ${updatedUser.worstScore ?? 'null'}, Winnings: ${updatedUser.totalWinnings ?? 'null'}`,
       );
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `Failed to update game completion stats for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to update game completion stats for user ${userId}: ${err.message}`,
       );
-      this.logger.error(`Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
-      // Don't throw - stats are secondary
+      this.logger.error(`Stack: ${err.stack}`);
+      this.logger.error(`Full error: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
+      // Don't throw - stats are secondary, but log so we can fix
     }
   }
 

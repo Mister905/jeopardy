@@ -172,8 +172,9 @@ export default function GameDetailPage() {
 
   if (shouldShowLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <LoadingSpinner size="lg" />
+        <p className="mt-4 text-white text-lg">Preparing your game board...</p>
       </div>
     );
   }
@@ -231,7 +232,7 @@ export default function GameDetailPage() {
       {game.state === 'PENDING' && (
         <div className="p-6 rounded-lg border-2" style={{ backgroundColor: 'rgba(0, 26, 165, 0.3)', borderColor: '#00188C', color: 'white' }}>
           {actionLoading ? (
-            <div className="flex flex-col items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
               <LoadingSpinner size="lg" />
               <p className="mt-4 text-white text-lg">Preparing your game board...</p>
             </div>
@@ -463,6 +464,9 @@ export default function GameDetailPage() {
                 />
                 <p className="text-sm text-white opacity-80 text-center mt-8 font-bold">
                   You can wager up to ${board?.currentRound === 'DOUBLE_JEOPARDY' ? '2,000' : '1,000'} or your current score, whichever is greater.
+                </p>
+                <p className="text-sm text-white opacity-80 text-center mt-2 font-extrabold">
+                  Current Score: ${game?.score?.toLocaleString('en-US') ?? '0'}
                 </p>
               </div>
             )}

@@ -1196,13 +1196,14 @@ export class GameService {
       },
     );
 
-    // Update user statistics for Final Jeopardy and game completion
+    // Update user statistics for Final Jeopardy and game completion (use game owner id)
+    const gameOwnerId = result.game.userId;
     await this.userService.updateUserStatsOnFinalJeopardyWager(
-      userId,
+      gameOwnerId,
       wager,
       correct,
     );
-    await this.userService.updateUserStatsOnGameComplete(userId, finalScore);
+    await this.userService.updateUserStatsOnGameComplete(gameOwnerId, finalScore);
 
     return {
       game: result.game,
@@ -1237,8 +1238,8 @@ export class GameService {
       data: { state: GameState.ELIMINATED },
     });
 
-    // Update user statistics for abandoned game (use current score as final score)
-    await this.userService.updateUserStatsOnGameComplete(userId, game.score);
+    // Do not update Games Played or completion stats for abandoned games.
+    // Only games completed via Final Jeopardy (COMPLETED state) are counted.
 
     return updatedGame;
   }

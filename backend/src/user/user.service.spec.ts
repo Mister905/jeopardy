@@ -410,6 +410,50 @@ describe('UserService', () => {
       });
     });
 
+    it('should update worst score for negative scores', async () => {
+      const existingUser = {
+        totalGamesPlayed: 4,
+        averageScore: 1000,
+        bestScore: 2000,
+        worstScore: -500,
+        totalWinnings: 3500,
+      };
+
+      mockPrismaClient.user.findUnique.mockResolvedValue(existingUser);
+      mockPrismaClient.user.update.mockResolvedValue({});
+
+      await service.updateUserStatsOnGameComplete(userId, -1000);
+
+      expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: expect.objectContaining({
+          worstScore: -1000, // Updated because -1000 < -500
+        }),
+      });
+    });
+
+    it('should update worst score when starting from null with negative score', async () => {
+      const existingUser = {
+        totalGamesPlayed: 0,
+        averageScore: 0,
+        bestScore: null,
+        worstScore: null,
+        totalWinnings: 0,
+      };
+
+      mockPrismaClient.user.findUnique.mockResolvedValue(existingUser);
+      mockPrismaClient.user.update.mockResolvedValue({});
+
+      await service.updateUserStatsOnGameComplete(userId, -500);
+
+      expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: expect.objectContaining({
+          worstScore: -500, // Set from null
+        }),
+      });
+    });
+
     it('should handle null best/worst scores', async () => {
       const existingUser = {
         totalGamesPlayed: 0,

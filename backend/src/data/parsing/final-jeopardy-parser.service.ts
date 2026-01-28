@@ -304,6 +304,13 @@ export class FinalJeopardyParserService {
   }
 
   /**
+   * Unescape quotes in a string (e.g., \"I Will Survive\" -> "I Will Survive")
+   */
+  private unescapeQuotes(str: string): string {
+    return str.replace(/\\"/g, '"').replace(/\\'/g, "'");
+  }
+
+  /**
    * Normalize a validated row into a ParsedFinalJeopardyClue
    */
   private normalizeClue(
@@ -313,11 +320,11 @@ export class FinalJeopardyParserService {
   ): ParsedFinalJeopardyClue {
     const clue: ParsedFinalJeopardyClue = {
       seasonNumber,
-      category: row.category.trim(),
+      category: this.unescapeQuotes(row.category.trim()),
       // Note: TSV file has columns labeled backwards from Jeopardy terminology
       // TSV "answer" column = clue text (what's shown), TSV "question" column = response
-      question: row.answer.trim(), // Clue text from TSV "answer" column
-      answer: row.question.trim(), // Response from TSV "question" column
+      question: this.unescapeQuotes(row.answer.trim()), // Clue text from TSV "answer" column
+      answer: this.unescapeQuotes(row.question.trim()), // Response from TSV "question" column
       sourceFile,
     };
 

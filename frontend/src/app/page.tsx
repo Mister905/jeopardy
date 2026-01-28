@@ -17,7 +17,6 @@ export default function HomePage() {
   const [gamesData, setGamesData] = useState<ListGamesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creatingGame, setCreatingGame] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -48,8 +47,9 @@ export default function HomePage() {
   };
 
   const handleCreateGame = async () => {
-    setCreatingGame(true);
     setError(null);
+    // Navigate immediately - the game detail page will handle loading state
+    // We'll create the game on the game detail page to avoid showing spinner here
     try {
       // Retrieve username from localStorage if available
       const username = localStorage.getItem('pendingUsername') || undefined;
@@ -71,8 +71,6 @@ export default function HomePage() {
       } else {
         setError('Failed to create game. Please try again.');
       }
-    } finally {
-      setCreatingGame(false);
     }
   };
 
@@ -101,7 +99,7 @@ export default function HomePage() {
         loading={loading}
         error={error}
         onCreateGame={handleCreateGame}
-        creatingGame={creatingGame}
+        creatingGame={false}
         onEndGame={handleEndGame}
       />
     </div>

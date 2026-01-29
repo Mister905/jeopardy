@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Plus } from 'lucide-react';
 import { GameCard } from './GameCard';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ErrorDisplay } from '../ui/ErrorDisplay';
@@ -55,8 +56,9 @@ export function GameList({
         <button
           onClick={onCreateGame}
           disabled={creatingGame}
-          className="game-list__create-btn px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
+          className="game-list__create-btn inline-flex items-center justify-center gap-2 px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
         >
+          <Plus className="h-5 w-5 shrink-0" aria-hidden />
           {creatingGame ? 'Creating...' : 'Create New Game'}
         </button>
       </div>
@@ -70,13 +72,14 @@ export function GameList({
           <button
             onClick={onCreateGame}
             disabled={creatingGame}
-            className="game-list__new-game-btn px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"
+            className="game-list__new-game-btn inline-flex items-center justify-center gap-2 px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"
           >
+            <Plus className="h-5 w-5 shrink-0" aria-hidden />
             {creatingGame ? 'Creating...' : 'New Game'}
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {activeGames.map((game) => (
           <GameCard
             key={game.id}

@@ -182,9 +182,9 @@ export const answerClue = createAsyncThunk(
     { dispatch, rejectWithValue },
   ) => {
     try {
-      await apiAnswerClue(gameId, clueId, correct);
+      const response = await apiAnswerClue(gameId, clueId, correct);
       await dispatch(fetchGameData(gameId));
-      return;
+      return response;
     } catch (err) {
       if (err instanceof ApiClientError) {
         return rejectWithValue({
@@ -529,9 +529,15 @@ const gameSlice = createSlice({
         state.actionLoading = true;
         state.error = null;
       })
-      .addCase(answerClue.fulfilled, (state) => {
+      .addCase(answerClue.fulfilled, (state, action) => {
         state.actionLoading = false;
         state.selectedClue = null; // Close clue modal
+        // When backend transitioned to FINAL_PENDING/ELIMINATED, it returns the updated game
+        if (action.payload?.game) {
+          state.game = action.payload.game;
+          state.gameId = action.payload.game.id;
+          state.previousGameState = action.payload.game.state;
+        }
       })
       .addCase(answerClue.rejected, (state, action) => {
         state.actionLoading = false;

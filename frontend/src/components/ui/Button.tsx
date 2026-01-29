@@ -1,25 +1,39 @@
+'use client';
+
 import React from 'react';
-import '@/styles/components/Button.scss';
+import { BaseButton } from '@/components/ui/base-button';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger';
   children: React.ReactNode;
 }
 
-export function Button({
-  variant = 'primary',
-  className = '',
-  disabled,
-  children,
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      className={`btn btn--${variant} ${className}`.trim()}
+const variantMap = {
+  primary: 'default',
+  secondary: 'secondary',
+  danger: 'destructive',
+} as const;
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      variant = 'primary',
+      className = '',
+      disabled,
+      children,
+      ...props
+    },
+    ref
+  ) => (
+    <BaseButton
+      ref={ref}
+      variant={variantMap[variant] as 'default' | 'secondary' | 'destructive'}
+      className={className}
       disabled={disabled}
       {...props}
     >
       {children}
-    </button>
-  );
-}
+    </BaseButton>
+  )
+);
+Button.displayName = 'Button';

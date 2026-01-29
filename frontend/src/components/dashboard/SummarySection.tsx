@@ -1,4 +1,5 @@
 import type { UserStats } from '@/lib/api/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import '@/styles/components/DashboardSection.scss';
 
 interface SummarySectionProps {
@@ -12,8 +13,13 @@ function formatCurrency(value: number | null): string {
 
 export function SummarySection({ stats }: SummarySectionProps) {
   return (
-    <section className="dashboard-section dashboard-section--summary">
-      <h2 className="text-2xl font-bold mb-4 text-white">Summary</h2>
+    <Card className="dashboard-section dashboard-section--summary">
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-2xl text-white">Summary</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div>
           <p className="text-white opacity-80 text-sm">Games Played</p>
@@ -36,6 +42,7 @@ export function SummarySection({ stats }: SummarySectionProps) {
           <p className="text-white text-2xl font-bold">{formatCurrency(stats.totalWinnings)}</p>
         </div>
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

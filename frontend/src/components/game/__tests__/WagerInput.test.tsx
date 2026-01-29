@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WagerInput } from '../WagerInput';
 
@@ -25,14 +25,18 @@ describe('WagerInput component', () => {
   });
 
   it('should validate wager is a number', async () => {
-    const user = userEvent.setup();
     render(<WagerInput {...defaultProps} />);
 
     const input = screen.getByLabelText(/wager/i);
-    const submitButton = screen.getByRole('button', { name: /submit/i });
+    const form = input.closest('form');
+    if (!form) throw new Error('Form not found');
 
-    await user.type(input, 'abc');
-    await user.click(submitButton);
+    await act(() => {
+      fireEvent.change(input, { target: { value: 'abc' } });
+    });
+    await act(() => {
+      fireEvent.submit(form);
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/valid number/i)).toBeInTheDocument();
@@ -47,8 +51,10 @@ describe('WagerInput component', () => {
     const input = screen.getByLabelText(/wager/i);
     const submitButton = screen.getByRole('button', { name: /submit/i });
 
-    await user.type(input, '50');
-    await user.click(submitButton);
+    await act(async () => {
+      await user.type(input, '50');
+      await user.click(submitButton);
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/minimum wager/i)).toBeInTheDocument();
@@ -57,14 +63,20 @@ describe('WagerInput component', () => {
   });
 
   it('should validate maximum wager', async () => {
-    const user = userEvent.setup();
     render(<WagerInput {...defaultProps} maxWager={1000} />);
 
     const input = screen.getByLabelText(/wager/i);
-    const submitButton = screen.getByRole('button', { name: /submit/i });
+    const form = input.closest('form');
+    if (!form) throw new Error('Form not found');
 
-    await user.type(input, '1500');
-    await user.click(submitButton);
+    await act(() => {
+      fireEvent.change(input, { target: { value: '1500' } });
+    });
+    await waitFor(() => expect(input).toHaveValue(1500));
+
+    await act(() => {
+      fireEvent.submit(form);
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/maximum wager/i)).toBeInTheDocument();
@@ -81,8 +93,10 @@ describe('WagerInput component', () => {
     const input = screen.getByLabelText(/wager/i);
     const submitButton = screen.getByRole('button', { name: /submit/i });
 
-    await user.type(input, '500');
-    await user.click(submitButton);
+    await act(async () => {
+      await user.type(input, '500');
+      await user.click(submitButton);
+    });
 
     await waitFor(() => {
       expect(mockOnSubmit).toHaveBeenCalledWith(500);
@@ -112,8 +126,10 @@ describe('WagerInput component', () => {
     const input = screen.getByLabelText(/wager/i) as HTMLInputElement;
     const submitButton = screen.getByRole('button', { name: /submit/i });
 
-    await user.type(input, '500');
-    await user.click(submitButton);
+    await act(async () => {
+      await user.type(input, '500');
+      await user.click(submitButton);
+    });
 
     await waitFor(() => {
       expect(input.value).toBe('');

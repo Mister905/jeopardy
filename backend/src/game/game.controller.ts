@@ -284,6 +284,7 @@ export class GameController {
         newScore: result.newScore,
         answeredAt: result.gameClue.answeredAt?.toISOString() ?? new Date().toISOString(),
         message: 'Clue answered successfully',
+        ...(result.game && { game: this.mapGameToResponseDto(result.game) }),
       };
     } catch (error) {
       this.logger.error(`Failed to answer clue: ${error instanceof Error ? error.message : String(error)}`);

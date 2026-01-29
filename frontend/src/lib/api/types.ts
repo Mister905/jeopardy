@@ -91,6 +91,8 @@ export interface AnswerClueResponse {
   newScore: number;
   answeredAt: string;
   message: string;
+  /** Present when game transitioned to FINAL_PENDING or ELIMINATED */
+  game?: GameResponse;
 }
 
 // Submit Wager Response DTO

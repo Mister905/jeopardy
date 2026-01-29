@@ -987,6 +987,7 @@ export class GameService {
 
     const allResolved = allGameClues.every((gc) => gc.state === ClueState.RESOLVED);
 
+    let updatedGame: Awaited<ReturnType<typeof this.getGameById>> = null;
     if (allResolved) {
       // Check if player is eligible for Final Jeopardy (score > 0)
       if (newScore > 0) {
@@ -1001,11 +1002,14 @@ export class GameService {
           data: { state: GameState.ELIMINATED },
         });
       }
+      // Return full game so client can update UI immediately without refetch
+      updatedGame = await this.getGameById(gameId, userId);
     }
 
     return {
       gameClue: updatedGameClue,
       newScore,
+      game: updatedGame ?? undefined,
     };
   }
 

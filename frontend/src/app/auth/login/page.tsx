@@ -14,6 +14,8 @@ import {
   clearAllErrors,
 } from '@/store/authSlice';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -168,28 +170,28 @@ export default function LoginPage() {
 
         {!signUpSuccess && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-white mb-1">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-white">
                 Email
-              </label>
-              <input
+              </Label>
+              <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                className="login-input bg-white text-gray-900"
                 placeholder="your@email.com"
               />
             </div>
 
             {mode === 'signUp' && (
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-white mb-1">
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-white">
                   Username
-                </label>
-                <input
+                </Label>
+                <Input
                   id="username"
                   type="text"
                   value={username}
@@ -198,20 +200,20 @@ export default function LoginPage() {
                   disabled={loading}
                   minLength={3}
                   maxLength={50}
-                  className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                  className="login-input bg-white text-gray-900"
                   placeholder="Choose a username"
                 />
-                <p className="mt-1 text-xs text-white opacity-70">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Username must be between 3 and 50 characters
                 </p>
               </div>
             )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-white mb-1">
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-white">
                 Password
-              </label>
-              <input
+              </Label>
+              <Input
                 id="password"
                 type="password"
                 value={password}
@@ -219,25 +221,22 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 minLength={6}
-                className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                className="login-input bg-white text-gray-900"
                 placeholder={mode === 'signUp' ? 'At least 6 characters' : ''}
               />
               {mode === 'signUp' && (
-                <p className="mt-1 text-xs text-white opacity-70">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Password must be at least 6 characters
                 </p>
               )}
             </div>
 
             {mode === 'signUp' && (
-              <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-white mb-1"
-                >
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-white">
                   Confirm Password
-                </label>
-                <input
+                </Label>
+                <Input
                   id="confirmPassword"
                   type="password"
                   value={confirmPassword}
@@ -245,7 +244,7 @@ export default function LoginPage() {
                   required
                   disabled={loading}
                   minLength={6}
-                  className="login-input w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+                  className="login-input bg-white text-gray-900"
                   placeholder="Confirm your password"
                 />
               </div>

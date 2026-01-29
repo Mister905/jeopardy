@@ -1,12 +1,7 @@
 @use '../variables' as *;
 
-.answer-adjudication {
-  background-color: $color-primary-nav;
-  border: 2px solid $color-border-section;
-}
-
 .answer-adjudication__show-answer-spacer {
-  margin-top: 3rem;
+  margin-top: 10rem;
 }
 
 .answer-adjudication__correct-btn {

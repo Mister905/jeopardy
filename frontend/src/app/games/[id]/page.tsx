@@ -24,6 +24,11 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 import { AnswerAdjudication } from '@/components/game/AnswerAdjudication';
 import { WagerInput } from '@/components/game/WagerInput';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { createGame } from '@/lib/api/games';
 import { getUserDashboard } from '@/lib/api/user';
 import type { JeopardyBoard } from '@/lib/api/types';
@@ -234,8 +239,8 @@ export default function GameDetailPage() {
             <>
               <h2 className="text-2xl font-bold mb-4 text-white">Ready to Start</h2>
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                  {error}
+                <div className="mb-4">
+                  <ErrorDisplay error={error} />
                 </div>
               )}
               <Button
@@ -398,16 +403,31 @@ export default function GameDetailPage() {
       )}
 
       {/* Selected Clue Modal/View */}
-      {selectedClue && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="game-detail-modal-overlay rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-10 border-2">
-            {!selectedClue.isDailyDouble && (
+      <Dialog
+        open={!!selectedClue}
+        onOpenChange={(open) => {
+          if (!open) dispatch(setSelectedClue(null));
+        }}
+      >
+        <DialogContent className="game-detail-modal-overlay max-w-2xl w-full max-h-[90vh] overflow-y-auto p-10 border-2 bg-card text-card-foreground">
+            {selectedClue && (
+              <DialogTitle className="sr-only">
+                {selectedClue.isDailyDouble
+                  ? dailyDoubleStep === 'intro'
+                    ? 'Daily Double'
+                    : dailyDoubleStep === 'wager'
+                      ? `${selectedClue.category || 'Daily Double'} - Enter your wager`
+                      : selectedClue.category || 'Daily Double - Question'
+                  : selectedClue.category || 'Clue'}
+              </DialogTitle>
+            )}
+            {selectedClue && !selectedClue.isDailyDouble && (
               <h3 className="text-2xl font-bold text-center text-white mb-4">
                 {selectedClue.category || 'Clue'}
               </h3>
             )}
 
-            {selectedClue.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'intro' && (
+            {selectedClue?.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'intro' && (
               <div className="space-y-6 text-center">
                 <div className="flex justify-center">
                   <img 
@@ -429,9 +449,11 @@ export default function GameDetailPage() {
               </div>
             )}
             
-            {selectedClue.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'wager' && (
+            {selectedClue?.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'wager' && (
               <div className="space-y-4">
-                <h3 className="text-2xl font-bold text-center text-white">Enter your wager:</h3>
+                <h3 className="text-2xl font-bold text-center text-white mb-4">
+                  {selectedClue.category || 'Clue'}
+                </h3>
                 <WagerInput
                   minWager={5}
                   maxWager={
@@ -448,6 +470,7 @@ export default function GameDetailPage() {
                   type="daily-double"
                   loading={actionLoading}
                   round={board?.currentRound === 'DOUBLE_JEOPARDY' ? 'DOUBLE_JEOPARDY' : 'JEOPARDY'}
+                  label="Enter your wager"
                 />
                 <p className="text-sm text-white opacity-80 text-center mt-8 font-bold">
                   You can wager up to ${board?.currentRound === 'DOUBLE_JEOPARDY' ? '2,000' : '1,000'} or your current score, whichever is greater.
@@ -458,7 +481,7 @@ export default function GameDetailPage() {
               </div>
             )}
             
-            {selectedClue.isDailyDouble && (selectedClue.state === 'ANSWERED' || dailyDoubleStep === 'question') && (
+            {selectedClue?.isDailyDouble && (selectedClue.state === 'ANSWERED' || dailyDoubleStep === 'question') && (
               <div>
                 {selectedClue.question ? (
                   <AnswerAdjudication
@@ -477,7 +500,7 @@ export default function GameDetailPage() {
               </div>
             )}
 
-            {selectedClue.state === 'ANSWERED' && !selectedClue.isDailyDouble && (
+            {selectedClue && selectedClue.state === 'ANSWERED' && !selectedClue.isDailyDouble && (
               <>
                 <AnswerAdjudication
                   question={selectedClue.question}
@@ -492,7 +515,7 @@ export default function GameDetailPage() {
               </>
             )}
 
-            {selectedClue.state === 'RESOLVED' && (
+            {selectedClue && selectedClue.state === 'RESOLVED' && (
               <div className="space-y-4">
                 <div>
                   <h4 className="font-semibold mb-2">Question:</h4>
@@ -510,7 +533,7 @@ export default function GameDetailPage() {
               </div>
             )}
 
-            {selectedClue.state === 'UNANSWERED' && !selectedClue.isDailyDouble && (
+            {selectedClue && selectedClue.state === 'UNANSWERED' && !selectedClue.isDailyDouble && (
               selectedClue.question && selectedClue.question.trim() ? (
                 <AnswerAdjudication
                   question={selectedClue.question}
@@ -521,9 +544,8 @@ export default function GameDetailPage() {
                 <div className="text-white">Loading question...</div>
               )
             )}
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

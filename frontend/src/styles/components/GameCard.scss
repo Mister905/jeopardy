@@ -1,6 +1,7 @@
 @use '../variables' as *;
 
 .game-card {
+  min-width: 360px;
   background-color: $color-primary-translucent;
   border: 2px solid $color-border;
   color: white;

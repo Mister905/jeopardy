@@ -85,7 +85,7 @@ export function GameCard({
   };
 
   return (
-    <div className="game-card rounded-lg p-4 border-2 transition-all relative hover:opacity-90">
+    <div className="game-card rounded-lg p-6 border-2 transition-all relative hover:opacity-90 min-h-[220px]">
       <Link href={`/games/${id}`} className="block">
         <div className="flex items-center justify-between mb-2">
           {getStateBadge(state)}

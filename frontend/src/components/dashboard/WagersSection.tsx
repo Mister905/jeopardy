@@ -1,4 +1,5 @@
 import type { UserStats } from '@/lib/api/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import '@/styles/components/DashboardSection.scss';
 
 interface WagersSectionProps {
@@ -12,8 +13,13 @@ function formatCurrency(value: number | null): string {
 
 export function WagersSection({ stats }: WagersSectionProps) {
   return (
-    <section className="dashboard-section dashboard-section--wagers">
-      <h2 className="text-2xl font-bold mb-4 text-white">Largest Wagers</h2>
+    <Card className="dashboard-section dashboard-section--wagers">
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-2xl text-white">Largest Wagers</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <h3 className="text-lg font-semibold mb-2 text-white">Daily Doubles</h3>
@@ -42,6 +48,7 @@ export function WagersSection({ stats }: WagersSectionProps) {
           </div>
         </div>
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

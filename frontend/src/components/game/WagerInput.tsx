@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button } from '../ui/Button';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import '@/styles/components/WagerInput.scss';
 
 interface WagerInputProps {
@@ -12,6 +14,8 @@ interface WagerInputProps {
   type: 'daily-double' | 'final-jeopardy';
   loading?: boolean;
   round?: 'JEOPARDY' | 'DOUBLE_JEOPARDY'; // Round for Daily Doubles to determine button text
+  /** Override the label for the wager input (default: "Wager amount") */
+  label?: string;
 }
 
 export function WagerInput({
@@ -22,6 +26,7 @@ export function WagerInput({
   type,
   loading = false,
   round,
+  label = 'Wager amount',
 }: WagerInputProps) {
   const [wager, setWager] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -114,20 +119,21 @@ export function WagerInput({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="wager">{label}</Label>
+        <Input
           id="wager"
           type="number"
           min={minWager}
           max={maxWager}
           value={wager}
           onChange={(e) => handleWagerChange(e.target.value)}
-          className="wager-input__field w-full px-3 py-2 rounded-md shadow-sm focus:outline-none disabled:opacity-50 text-gray-900"
+          className="wager-input__field bg-white text-gray-900"
           disabled={loading}
         />
       </div>
       {error && (
-        <div className="text-red-600 text-sm">{error}</div>
+        <p className="text-sm text-destructive" role="alert">{error}</p>
       )}
       <div className="flex gap-2 mt-6">
         {dailyDoubleButtonInfo && (

@@ -1,4 +1,6 @@
 import React from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { BaseButton } from '@/components/ui/base-button';
 
 interface ErrorDisplayProps {
   error: string | Error;
@@ -9,19 +11,20 @@ export function ErrorDisplay({ error, onDismiss }: ErrorDisplayProps) {
   const errorMessage = error instanceof Error ? error.message : error;
 
   return (
-    <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded relative">
-      <div className="flex items-center justify-between">
-        <span>{errorMessage}</span>
-        {onDismiss && (
-          <button
-            onClick={onDismiss}
-            className="text-red-800 hover:text-red-900 ml-4"
-            aria-label="Dismiss error"
-          >
-            ×
-          </button>
-        )}
-      </div>
-    </div>
+    <Alert variant="destructive" className="flex items-center justify-between gap-2">
+      <AlertDescription className="flex-1">{errorMessage}</AlertDescription>
+      {onDismiss && (
+        <BaseButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          aria-label="Dismiss error"
+          className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          ×
+        </BaseButton>
+      )}
+    </Alert>
   );
 }

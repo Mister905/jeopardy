@@ -1,4 +1,5 @@
 import type { UserStats } from '@/lib/api/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import '@/styles/components/DashboardSection.scss';
 
 interface AccuracySectionProps {
@@ -12,8 +13,13 @@ function formatPercentage(value: number | null): string {
 
 export function AccuracySection({ stats }: AccuracySectionProps) {
   return (
-    <section className="dashboard-section dashboard-section--accuracy">
-      <h2 className="text-2xl font-bold mb-4 text-white">Accuracy</h2>
+    <Card className="dashboard-section dashboard-section--accuracy">
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-2xl text-white">Accuracy</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <p className="text-white opacity-80 text-sm">Overall Accuracy</p>
@@ -39,6 +45,7 @@ export function AccuracySection({ stats }: AccuracySectionProps) {
           <p className="text-white text-xl font-bold">{formatPercentage(stats.finalJeopardyAccuracy)}</p>
         </div>
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

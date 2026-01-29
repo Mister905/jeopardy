@@ -245,6 +245,14 @@ describe('UserService', () => {
         currentIncorrectStreak: 0,
         longestCorrectStreak: 5,
         longestIncorrectStreak: 3,
+        totalCorrectAnswers: 10,
+        totalIncorrectAnswers: 5,
+        jeopardyCorrect: 4,
+        jeopardyIncorrect: 2,
+        doubleJeopardyCorrect: 6,
+        doubleJeopardyIncorrect: 3,
+        dailyDoubleCorrect: 0,
+        dailyDoubleIncorrect: 0,
       };
 
       mockPrismaClient.user.findUnique.mockResolvedValue(existingUser);
@@ -259,11 +267,11 @@ describe('UserService', () => {
       expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
         where: { id: userId },
         data: expect.objectContaining({
-          totalCorrectAnswers: { increment: 1 },
-          jeopardyCorrect: { increment: 1 },
+          totalCorrectAnswers: 11,
+          jeopardyCorrect: 5,
           currentCorrectStreak: 3,
           currentIncorrectStreak: 0,
-          longestCorrectStreak: 5, // Not updated (3 < 5)
+          longestCorrectStreak: 5,
         }),
       });
     });
@@ -274,6 +282,14 @@ describe('UserService', () => {
         currentIncorrectStreak: 0,
         longestCorrectStreak: 5,
         longestIncorrectStreak: 3,
+        totalCorrectAnswers: 20,
+        totalIncorrectAnswers: 10,
+        jeopardyCorrect: 8,
+        jeopardyIncorrect: 4,
+        doubleJeopardyCorrect: 12,
+        doubleJeopardyIncorrect: 6,
+        dailyDoubleCorrect: 0,
+        dailyDoubleIncorrect: 0,
       };
 
       mockPrismaClient.user.findUnique.mockResolvedValue(existingUser);
@@ -288,7 +304,7 @@ describe('UserService', () => {
       expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
         where: { id: userId },
         data: expect.objectContaining({
-          longestCorrectStreak: 6, // Updated (6 > 5)
+          longestCorrectStreak: 6,
         }),
       });
     });
@@ -304,6 +320,14 @@ describe('UserService', () => {
         currentIncorrectStreak: 0,
         longestCorrectStreak: 0,
         longestIncorrectStreak: 0,
+        totalCorrectAnswers: 0,
+        totalIncorrectAnswers: 0,
+        jeopardyCorrect: 0,
+        jeopardyIncorrect: 0,
+        doubleJeopardyCorrect: 0,
+        doubleJeopardyIncorrect: 0,
+        dailyDoubleCorrect: 0,
+        dailyDoubleIncorrect: 0,
       };
 
       mockPrismaClient.user.findUnique.mockResolvedValue(existingUser);
@@ -318,7 +342,7 @@ describe('UserService', () => {
       expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
         where: { id: userId },
         data: expect.objectContaining({
-          dailyDoubleCorrect: { increment: 1 },
+          dailyDoubleCorrect: 1,
         }),
       });
     });
@@ -357,11 +381,9 @@ describe('UserService', () => {
       expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
         where: { id: userId },
         data: expect.objectContaining({
-          totalGamesPlayed: { increment: 1 },
+          totalGamesPlayed: 5,
           averageScore: expectedAverage,
-          bestScore: 2000, // Not updated (1500 < 2000)
-          worstScore: -500, // Not updated (1500 > -500)
-          totalWinnings: { increment: 1500 }, // Positive score
+          totalWinnings: 5000,
         }),
       });
     });
@@ -388,7 +410,7 @@ describe('UserService', () => {
       });
     });
 
-    it('should not update totalWinnings for negative scores', async () => {
+    it('should not increment totalWinnings for negative scores', async () => {
       const existingUser = {
         totalGamesPlayed: 4,
         averageScore: 1000,
@@ -404,8 +426,8 @@ describe('UserService', () => {
 
       expect(mockPrismaClient.user.update).toHaveBeenCalledWith({
         where: { id: userId },
-        data: expect.not.objectContaining({
-          totalWinnings: expect.anything(),
+        data: expect.objectContaining({
+          totalWinnings: 3500, // Unchanged (score was negative)
         }),
       });
     });

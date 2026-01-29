@@ -1,0 +1,79 @@
+Turn this into a Cursor @plan_feature.md prompt
+
+
+Docker is helpful because it makes your application run the same way everywhere by packaging code, dependencies, and runtime into consistent containers. For example, instead of relying on each developer to install the correct Node version, database, or environment variables, Docker defines these once in a Dockerfile. In local development, this eliminates “works on my machine” issues by ensuring the frontend and backend always run with the same Node versions, ports, and configs. With Docker Compose, you can start the entire stack (e.g., React frontend on :3000, API on :4000) using a single command like docker compose up.
+
+For deployment, Docker reduces risk by keeping the runtime environment identical to what you tested locally. The same container that runs on your laptop can be deployed to staging or production with no code changes, only configuration differences. For example, a backend container tested locally can be pushed to a cloud provider and scaled horizontally without rewriting setup scripts. This consistency makes releases more predictable, simplifies CI/CD pipelines, and lowers the chance of environment-specific bugs appearing late in the process.
+
+
+You generally want to dockerize after you’ve proven the app works end-to-end in a normal local setup, but before deployment, scaling, or heavy iteration begins. At that point, you’ve established a baseline of practical functionality (core flows work, services are defined, ports and env vars are known), and Docker’s job becomes locking that reality in.
+
+
+Roadmap Phase: Docker Integration & Environment Hardening
+
+Phase Goal
+Lock in a reproducible, deterministic development and deployment environment once core gameplay and UI flows are stable.
+
+Option A (Recommended): Dockerize everything, but dev-friendly
+
+Best if you want one command and consistent behavior
+
+How it works
+	•	Backend runs in Docker
+	•	DB runs in Docker
+	•	Frontend runs in Docker with volume mounts + hot reload
+
+
+docker compose up
+
+
+You code as usual → browser updates instantly.
+
+Why this works now
+	•	Your frontend depends heavily on backend state
+	•	Your API surface is stabilizing
+	•	You want reproducible demos
+
+
+🧱 What Docker Compose gives you (either option)
+	•	Shared .env
+	•	Guaranteed startup order
+	•	Stable service URLs
+	•	Easy reset (docker compose down -v)
+	•	Ingestion scripts that always work
+
+
+Example compose topology
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  db:
+    image: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+
+
+
+
+Phase Outcomes
+
+By the end of this phase:
+	•	A new developer can run the project with one command
+	•	Backend + DB startup order is guaranteed
+	•	Environment parity exists across machines
+	•	Ingestion and seed workflows are reproducible
+	•	CI/CD becomes feasible later without rework

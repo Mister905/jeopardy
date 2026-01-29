@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { UserService } from '../user/user.service';
 import { GameService } from './game.service';
 import { GameState, Round } from '@prisma/client';
 
@@ -13,6 +14,9 @@ describe('GameService', () => {
     mockPrismaClient = {
       clue: {
         findMany: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ email: 'test@example.com' }),
       },
       game: {
         create: jest.fn(),
@@ -35,6 +39,16 @@ describe('GameService', () => {
         {
           provide: PrismaService,
           useValue: prismaService,
+        },
+        {
+          provide: UserService,
+          useValue: {
+            ensureUserExists: jest.fn().mockResolvedValue({ id: 'user-1', email: 't@t.com', username: 'u' }),
+            updateUserStatsOnClueResolved: jest.fn().mockResolvedValue(undefined),
+            updateUserStatsOnDailyDoubleWager: jest.fn().mockResolvedValue(undefined),
+            updateUserStatsOnFinalJeopardyWager: jest.fn().mockResolvedValue(undefined),
+            updateUserStatsOnGameComplete: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();
@@ -96,7 +110,6 @@ describe('GameService', () => {
       expect(result).toEqual(mockClues[0]);
       expect(mockPrismaClient.clue.findMany).toHaveBeenCalledWith({
         where: { round: Round.FINAL },
-        take: 1,
       });
     });
 
@@ -299,7 +312,6 @@ describe('GameService', () => {
       expect(selectedClueId).toBe('clue-1');
       expect(mockPrismaClient.clue.findMany).toHaveBeenCalledWith({
         where: { round: Round.FINAL },
-        take: 1,
       });
     });
   });

@@ -4,6 +4,7 @@ import {
   getBoard,
   startGame as apiStartGame,
   answerClue as apiAnswerClue,
+  passClue as apiPassClue,
   submitClueWager as apiSubmitClueWager,
   submitFinalJeopardyWager as apiSubmitFinalJeopardyWager,
   answerFinalJeopardy as apiAnswerFinalJeopardy,
@@ -194,6 +195,32 @@ export const answerClue = createAsyncThunk(
       }
       return rejectWithValue({
         error: 'Failed to submit answer. Please try again.',
+        statusCode: 500,
+      });
+    }
+  },
+);
+
+// Thunk to pass on a clue (regular clues only; not allowed for Daily Doubles)
+export const passClue = createAsyncThunk(
+  'game/passClue',
+  async (
+    { gameId, clueId }: { gameId: string; clueId: string },
+    { dispatch, rejectWithValue },
+  ) => {
+    try {
+      const response = await apiPassClue(gameId, clueId);
+      await dispatch(fetchGameData(gameId));
+      return response;
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        return rejectWithValue({
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+      }
+      return rejectWithValue({
+        error: 'Failed to pass clue. Please try again.',
         statusCode: 500,
       });
     }
@@ -453,20 +480,9 @@ const gameSlice = createSlice({
         state.gameId = game.id;
         state.error = null;
 
-        // Check if selected clue is now resolved
-        if (state.selectedClue && board?.board && 'categories' in board.board) {
-          const jeopardyBoard = board.board as JeopardyBoard;
-          for (const category of jeopardyBoard.categories) {
-            const clue = category.clues.find(
-              (c) => c.gameClueId === state.selectedClue?.gameClueId,
-            );
-            if (clue && clue.state === 'RESOLVED' && state.selectedClue.state !== 'RESOLVED') {
-              // Clue was resolved, clear selection
-              state.selectedClue = null;
-              break;
-            }
-          }
-        }
+        // Do not clear selectedClue here when clue becomes RESOLVED: after Pass we keep
+        // the dialog open so the user can review the answer and click Continue; clearing
+        // is done in answerClue.fulfilled (after answer) or by the user clicking Continue.
 
         // Update polling based on new state
         const shouldStartPolling = shouldPoll(currentState);
@@ -540,6 +556,29 @@ const gameSlice = createSlice({
         }
       })
       .addCase(answerClue.rejected, (state, action) => {
+        state.actionLoading = false;
+        const payload = action.payload as { error?: string; statusCode?: number };
+        if (payload?.error) {
+          state.error = payload.error;
+        }
+      });
+
+    // passClue
+    builder
+      .addCase(passClue.pending, (state) => {
+        state.actionLoading = true;
+        state.error = null;
+      })
+      .addCase(passClue.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        // Keep selectedClue so UI can show answer + Continue; parent clears on Continue
+        if (action.payload?.game) {
+          state.game = action.payload.game;
+          state.gameId = action.payload.game.id;
+          state.previousGameState = action.payload.game.state;
+        }
+      })
+      .addCase(passClue.rejected, (state, action) => {
         state.actionLoading = false;
         const payload = action.payload as { error?: string; statusCode?: number };
         if (payload?.error) {

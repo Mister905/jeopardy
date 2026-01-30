@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
+import { PassValidationException } from './exceptions/pass-validation.exception';
 import {
   GameState,
   Round,
@@ -876,6 +877,7 @@ export class GameService {
   ): Promise<{
     gameClue: GameClue;
     newScore: number;
+    game?: NonNullable<Awaited<ReturnType<typeof this.getGameById>>>;
   }> {
     const game = await this.getGameById(gameId, userId);
     if (!game) {
@@ -1009,6 +1011,103 @@ export class GameService {
     return {
       gameClue: updatedGameClue,
       newScore,
+      game: updatedGame ?? undefined,
+    };
+  }
+
+  /**
+   * Pass on a regular (non–Daily Double) clue: resolve with no score change.
+   * Not allowed for Daily Doubles or already-resolved clues.
+   * @param gameId - Game ID
+   * @param clueId - GameClue ID
+   * @param userId - User ID for authorization
+   * @returns Updated game clue and unchanged score
+   */
+  async passClue(
+    gameId: string,
+    clueId: string,
+    userId: string,
+  ): Promise<{
+    gameClue: GameClue;
+    newScore: number;
+    game?: NonNullable<Awaited<ReturnType<typeof this.getGameById>>>;
+  }> {
+    const game = await this.getGameById(gameId, userId);
+    if (!game) {
+      throw new Error('Game not found or access denied');
+    }
+
+    if (game.state !== GameState.ACTIVE) {
+      throw new Error(`Game is not in an active state: ${game.state}`);
+    }
+
+    const gameClue = await this.prismaService.client.gameClue.findUnique({
+      where: { id: clueId },
+      include: { clue: true },
+    });
+
+    if (!gameClue) {
+      throw new Error('Clue not found');
+    }
+
+    if (gameClue.gameId !== gameId) {
+      throw new Error('Clue does not belong to this game');
+    }
+
+    const isDailyDouble = gameClue.wager !== null || gameClue.isDailyDouble;
+    if (isDailyDouble) {
+      throw new PassValidationException('Pass is not allowed for Daily Double clues');
+    }
+
+    if (gameClue.state !== ClueState.UNANSWERED) {
+      throw new PassValidationException('Clue has already been resolved');
+    }
+
+    const [updatedGameClue] = await this.prismaService.client.$transaction([
+      this.prismaService.client.gameClue.update({
+        where: { id: clueId },
+        data: {
+          state: ClueState.RESOLVED,
+          scoreDelta: 0,
+          answeredAt: new Date(),
+        },
+        include: { clue: true },
+      }),
+    ]);
+
+    // Score unchanged; do not call updateUserStatsOnClueResolved for pass
+
+    const allGameClues = await this.prismaService.client.gameClue.findMany({
+      where: {
+        gameId,
+        clue: {
+          round: { in: [Round.JEOPARDY, Round.DOUBLE_JEOPARDY] },
+        },
+      },
+      include: { clue: true },
+    });
+
+    const allResolved = allGameClues.every((gc) => gc.state === ClueState.RESOLVED);
+    let updatedGame: Awaited<ReturnType<typeof this.getGameById>> = null;
+    if (allResolved) {
+      const currentScore = game.score;
+      if (currentScore > 0) {
+        await this.prismaService.client.game.update({
+          where: { id: gameId },
+          data: { state: GameState.FINAL_PENDING },
+        });
+      } else {
+        await this.prismaService.client.game.update({
+          where: { id: gameId },
+          data: { state: GameState.ELIMINATED },
+        });
+      }
+      updatedGame = await this.getGameById(gameId, userId);
+    }
+
+    return {
+      gameClue: updatedGameClue,
+      newScore: game.score,
       game: updatedGame ?? undefined,
     };
   }

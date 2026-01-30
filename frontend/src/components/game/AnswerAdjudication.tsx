@@ -11,6 +11,12 @@ interface AnswerAdjudicationProps {
   question: string;
   answer?: string;
   onAnswer: (correct: boolean) => Promise<void>;
+  /** When true, show Pass button next to Show Answer. Must be false for Daily Doubles. */
+  allowPass?: boolean;
+  /** Called when user clicks Pass; only used when allowPass is true. */
+  onPass?: () => Promise<void>;
+  /** Called when user clicks Continue after passing; closes the clue view. */
+  onContinue?: () => void;
   loading?: boolean;
   gameClues?: Array<{
     id: string;
@@ -28,6 +34,9 @@ export function AnswerAdjudication({
   question,
   answer: answerProp,
   onAnswer,
+  allowPass = false,
+  onPass,
+  onContinue,
   loading = false,
   gameClues,
   gameClueId,
@@ -40,6 +49,7 @@ export function AnswerAdjudication({
   const gameId = gameIdProp || gameIdFromParams;
   
   const [showAnswer, setShowAnswer] = useState(false);
+  const [passed, setPassed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [answer, setAnswer] = useState(answerProp);
   const [fetchingAnswer, setFetchingAnswer] = useState(false);
@@ -128,6 +138,41 @@ export function AnswerAdjudication({
     }
   };
 
+  const handlePass = async () => {
+    if (!onPass) return;
+    // Reveal answer area and trigger answer load (same as Show Answer)
+    setShowAnswer(true);
+    setPassed(true);
+    if (!answer && gameClues && gameClues.length > 0 && (gameClueId || clueId)) {
+      const gameClue = gameClueId
+        ? gameClues.find((gc) => gc.id === gameClueId)
+        : gameClues.find((gc) => gc.clueId === clueId);
+      if (gameClue?.clue?.answer) setAnswer(gameClue.clue.answer);
+    }
+    if (!answer && gameId && !fetchingAnswer) {
+      setFetchingAnswer(true);
+      getGame(gameId)
+        .then((gameData) => {
+          if (gameData.gameClues?.length) {
+            const gc = gameClueId
+              ? gameData.gameClues.find((g) => g.id === gameClueId)
+              : gameData.gameClues.find((g) => g.clueId === clueId);
+            if (gc?.clue?.answer) setAnswer(gc.clue.answer);
+          }
+        })
+        .catch((err) => console.error('[AnswerAdjudication] Failed to fetch answer:', err))
+        .finally(() => setFetchingAnswer(false));
+    }
+    setSubmitting(true);
+    try {
+      await onPass();
+    } catch (err) {
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="answer-adjudication space-y-4 p-6 rounded-lg">
       <div>
@@ -149,9 +194,9 @@ export function AnswerAdjudication({
       )}
 
       {!showAnswer && (
-        <div className="answer-adjudication__show-answer-spacer">
+        <div className="answer-adjudication__show-answer-spacer answer-adjudication__button-row">
           <Button
-            className="w-full"
+            className="answer-adjudication__show-answer-btn"
             onClick={() => {
             // When "Show Answer" is clicked, try to extract answer immediately if not already set
             if (!answer && gameClues && gameClues.length > 0 && (gameClueId || clueId)) {
@@ -211,12 +256,40 @@ export function AnswerAdjudication({
           >
             Show Answer
           </Button>
+          {allowPass && onPass && (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading || submitting}
+              onClick={handlePass}
+              className="answer-adjudication__pass-btn"
+            >
+              Pass
+            </Button>
+          )}
         </div>
       )}
 
       {showAnswer && (
         <>
-          {submitting ? (
+          {passed && onContinue ? (
+            <div className="flex justify-center pt-4">
+              <Button
+                onClick={onContinue}
+                disabled={submitting}
+                className="answer-adjudication__continue-btn"
+              >
+                {submitting ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span className="ml-2">Submitting...</span>
+                  </>
+                ) : (
+                  'Continue'
+                )}
+              </Button>
+            </div>
+          ) : submitting ? (
             <div className="flex flex-col items-center justify-center py-8">
               <LoadingSpinner size="lg" />
               <p className="mt-4 text-white text-lg font-medium">Submitting...</p>

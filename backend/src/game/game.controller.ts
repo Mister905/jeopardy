@@ -34,6 +34,7 @@ import {
   GameStateException,
   ClueNotFoundException,
   WagerValidationException,
+  PassValidationException,
   UnauthorizedGameAccessException,
 } from './exceptions';
 import { GameState, Round, Game, GameClue, FinalJeopardy, Clue } from '@prisma/client';
@@ -85,6 +86,7 @@ export class GameController {
       error instanceof GameNotFoundException ||
       error instanceof GameStateException ||
       error instanceof WagerValidationException ||
+      error instanceof PassValidationException ||
       error instanceof ClueNotFoundException ||
       error instanceof UnauthorizedGameAccessException
     ) {
@@ -288,6 +290,56 @@ export class GameController {
       };
     } catch (error) {
       this.logger.error(`Failed to answer clue: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.message.includes('Clue not found')) {
+        throw new ClueNotFoundException(clueId);
+      }
+      this.handleServiceError(error, gameId, user.userId);
+    }
+  }
+
+  /**
+   * POST /games/:id/clues/:clueId/pass
+   * Pass on a regular (non–Daily Double) clue; no score change. Not allowed for Daily Doubles.
+   */
+  @Post(':id/clues/:clueId/pass')
+  @HttpCode(HttpStatus.OK)
+  async passClue(
+    @Param('id') gameId: string,
+    @Param('clueId') clueId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<AnswerClueResponseDto> {
+    this.logger.log(
+      `Passing clue ${clueId} in game ${gameId} for user: ${user.userId}`,
+    );
+
+    const game = await this.verifyGameOwnership(gameId, user.userId);
+    if (game.state !== GameState.ACTIVE) {
+      throw new GameStateException(game.state, GameState.ACTIVE);
+    }
+
+    try {
+      const result = await this.gameService.passClue(
+        gameId,
+        clueId,
+        user.userId,
+      );
+
+      return {
+        gameClueId: result.gameClue.id,
+        clueId: result.gameClue.clueId,
+        state: result.gameClue.state,
+        correct: false,
+        scoreDelta: 0,
+        newScore: result.newScore,
+        answeredAt:
+          result.gameClue.answeredAt?.toISOString() ?? new Date().toISOString(),
+        message: 'Clue passed',
+        ...(result.game && { game: this.mapGameToResponseDto(result.game) }),
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to pass clue: ${error instanceof Error ? error.message : String(error)}`,
+      );
       if (error instanceof Error && error.message.includes('Clue not found')) {
         throw new ClueNotFoundException(clueId);
       }

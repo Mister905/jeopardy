@@ -28,6 +28,7 @@ export function renderWithProviders(
     store ||
     (configureStore({
       reducer: { game: gameReducer, auth: authReducer },
+      preloadedState,
     }) as any);
 
   function Wrapper({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,7 @@ export function renderWithProviders(
 export function createMockStore(preloadedState?: PreloadedState<RootState>) {
   return configureStore({
     reducer: { game: gameReducer, auth: authReducer },
+    ...(preloadedState && { preloadedState }),
   }) as any;
 }
 

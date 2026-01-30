@@ -94,6 +94,19 @@ export async function answerClue(
 }
 
 /**
+ * Pass on a regular (non–Daily Double) clue; no score change. Not allowed for Daily Doubles.
+ */
+export async function passClue(
+  gameId: string,
+  clueId: string,
+): Promise<AnswerClueResponse> {
+  return apiPost<AnswerClueResponse>(
+    `/games/${gameId}/clues/${clueId}/pass`,
+    {},
+  );
+}
+
+/**
  * Submit a wager for a Daily Double clue
  */
 export async function submitClueWager(

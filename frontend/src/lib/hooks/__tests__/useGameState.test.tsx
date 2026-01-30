@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useGameState } from '../useGameState';
 import { renderWithProviders, createMockStore } from '@/test-utils/test-utils';
 import { createMockGame } from '@/test-utils/mocks/gameMocks';
@@ -112,7 +112,9 @@ describe('useGameState hook', () => {
       wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
     });
 
-    await result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
+    });
 
     expect(gamesApi.getGame).toHaveBeenCalledWith('game-1');
   });

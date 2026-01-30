@@ -8,7 +8,7 @@ interface WagersSectionProps {
 
 function formatCurrency(value: number | null): string {
   if (value === null) return 'N/A';
-  return `$${value.toLocaleString('en-US')}`;
+  return `$${Math.round(value).toLocaleString('en-US')}`;
 }
 
 export function WagersSection({ stats }: WagersSectionProps) {

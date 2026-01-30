@@ -9,8 +9,6 @@ import gameReducer, {
   type GameState,
 } from '../gameSlice';
 import { createMockGameState, createMockBoardState, createMockSelectedClue } from '@/test-utils/test-utils';
-import { mockPendingGame } from '@/test-utils/mocks/gameMocks';
-import { createMockBoardResponse } from '@/test-utils/mocks/boardMocks';
 
 describe('gameSlice reducers', () => {
   const initialState: GameState = {

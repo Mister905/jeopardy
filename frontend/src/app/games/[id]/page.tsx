@@ -9,6 +9,7 @@ import {
   startGame,
   selectClue,
   answerClue,
+  passClue,
   submitClueWager,
   submitFinalJeopardyWager,
   answerFinalJeopardy,
@@ -145,6 +146,11 @@ export default function GameDetailPage() {
     if (!selectedClue) return;
     // Use gameClueId (GameClue ID) not clueId (Clue ID) - backend expects GameClue ID
     await dispatch(answerClue({ gameId, clueId: selectedClue.gameClueId, correct }));
+  };
+
+  const handlePassClue = async () => {
+    if (!selectedClue) return;
+    await dispatch(passClue({ gameId, clueId: selectedClue.gameClueId }));
   };
 
   const handleFinalJeopardyWager = async (wager: number) => {
@@ -481,13 +487,14 @@ export default function GameDetailPage() {
               </div>
             )}
             
-            {selectedClue?.isDailyDouble && (selectedClue.state === 'ANSWERED' || dailyDoubleStep === 'question') && (
+                {selectedClue?.isDailyDouble && (selectedClue.state === 'ANSWERED' || dailyDoubleStep === 'question') && (
               <div>
                 {selectedClue.question ? (
                   <AnswerAdjudication
                     question={selectedClue.question}
                     answer={selectedClue.answer}
                     onAnswer={handleAnswerClue}
+                    allowPass={false}
                     loading={actionLoading}
                     gameClues={game?.gameClues}
                     gameClueId={selectedClue.gameClueId}
@@ -510,6 +517,7 @@ export default function GameDetailPage() {
                   clueId={selectedClue.clueId}
                   gameId={gameId}
                   onAnswer={handleAnswerClue}
+                  allowPass={false}
                   loading={actionLoading}
                 />
               </>
@@ -538,7 +546,14 @@ export default function GameDetailPage() {
                 <AnswerAdjudication
                   question={selectedClue.question}
                   onAnswer={handleAnswerClue}
+                  allowPass={!selectedClue?.isDailyDouble}
+                  onPass={handlePassClue}
+                  onContinue={handleCloseClue}
                   loading={actionLoading}
+                  gameClues={game?.gameClues}
+                  gameClueId={selectedClue.gameClueId}
+                  clueId={selectedClue.clueId}
+                  gameId={gameId}
                 />
               ) : (
                 <div className="text-white">Loading question...</div>

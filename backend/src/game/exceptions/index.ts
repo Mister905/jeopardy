@@ -1,4 +1,5 @@
 export * from './game-not-found.exception';
+export * from './game-in-progress.exception';
 export * from './game-state.exception';
 export * from './clue-not-found.exception';
 export * from './wager-validation.exception';

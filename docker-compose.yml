@@ -1,0 +1,43 @@
+# Developer-friendly stack: backend + frontend only.
+# Supabase (Postgres + Auth) is external; no database container.
+# Usage: docker compose up
+# Frontend: http://localhost:3000  |  Backend API: http://localhost:3001
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      FRONTEND_URL: http://localhost:3000
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_node_modules:
+  frontend_node_modules:

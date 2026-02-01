@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
+import { GameInProgressException } from './exceptions/game-in-progress.exception';
 import { PassValidationException } from './exceptions/pass-validation.exception';
 import {
   GameState,
@@ -39,6 +40,24 @@ export class GameService {
 
     // Step 1: Validate User
     this.validateUserId(userId);
+
+    // Step 1.1: Ensure user has no game already in progress (only one at a time)
+    const inProgressGame = await this.prismaService.client.game.findFirst({
+      where: {
+        userId,
+        state: {
+          in: [
+            GameState.PENDING,
+            GameState.ACTIVE,
+            GameState.FINAL_PENDING,
+            GameState.FINAL_ACTIVE,
+          ],
+        },
+      },
+    });
+    if (inProgressGame) {
+      throw new GameInProgressException();
+    }
 
     // Step 1.5: Ensure User exists (create if needed)
     // If email is not provided, try to get it from existing user record

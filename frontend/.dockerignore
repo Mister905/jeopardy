@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+build
+.env
+.env.*
+*.log
+coverage
+.vercel
+.git
+.gitignore
+README.md
+REFACTOR.md

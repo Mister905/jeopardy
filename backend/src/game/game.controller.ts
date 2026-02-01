@@ -31,6 +31,7 @@ import {
 } from './dto';
 import {
   GameNotFoundException,
+  GameInProgressException,
   GameStateException,
   ClueNotFoundException,
   WagerValidationException,
@@ -84,6 +85,7 @@ export class GameController {
     // Re-throw known exceptions as-is
     if (
       error instanceof GameNotFoundException ||
+      error instanceof GameInProgressException ||
       error instanceof GameStateException ||
       error instanceof WagerValidationException ||
       error instanceof PassValidationException ||

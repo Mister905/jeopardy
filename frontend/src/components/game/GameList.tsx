@@ -25,18 +25,13 @@ export function GameList({
   creatingGame,
   onEndGame,
 }: GameListProps) {
-  // Filter out completed and eliminated games
+  // Filter out completed and eliminated games (any other state is "in progress")
   const activeGames = data?.games.filter(
     (game) => game.state !== 'COMPLETED' && game.state !== 'ELIMINATED'
   ) || [];
 
-  // Check if there's a game in progress
-  const hasGameInProgress = activeGames.some(
-    (game) =>
-      game.state === 'ACTIVE' ||
-      game.state === 'FINAL_PENDING' ||
-      game.state === 'FINAL_ACTIVE'
-  );
+  // Only one game in progress allowed: hide New Game if user has any non-terminal game
+  const hasGameInProgress = activeGames.length > 0;
 
   if (loading) {
     return (

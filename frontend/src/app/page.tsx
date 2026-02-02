@@ -8,9 +8,6 @@ import { createGame, listGames, endGame } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListGamesResponse } from '@/lib/api/types';
 
-// Mark as dynamic to prevent static generation
-export const dynamic = 'force-dynamic';
-
 export default function HomePage() {
   const { user, loading: authLoading } = useRequireAuth();
   const router = useRouter();

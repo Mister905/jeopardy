@@ -6,9 +6,6 @@ import { supabase } from '@/lib/auth/supabase';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 
-// Mark as dynamic to prevent static generation
-export const dynamic = 'force-dynamic';
-
 function CallbackContent() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);

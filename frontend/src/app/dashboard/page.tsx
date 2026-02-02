@@ -12,9 +12,6 @@ import { AccuracySection } from '@/components/dashboard/AccuracySection';
 import { StreaksSection } from '@/components/dashboard/StreaksSection';
 import { WagersSection } from '@/components/dashboard/WagersSection';
 
-// Mark as dynamic to prevent static generation
-export const dynamic = 'force-dynamic';
-
 export default function DashboardPage() {
   const { user, loading: authLoading } = useRequireAuth();
   const [dashboardData, setDashboardData] = useState<UserDashboardResponse | null>(null);

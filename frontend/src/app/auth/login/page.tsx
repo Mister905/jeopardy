@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from 'react';
 import '@/styles/components/LoginPage.scss';
+import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAuth } from '@/lib/auth/hooks';
@@ -139,10 +140,12 @@ export default function LoginPage() {
     <div className="max-w-md mx-auto mt-12">
       <div className="login-card rounded-lg shadow-lg p-8 border-2">
         <div className="flex justify-center mb-8">
-          <img 
-            src="/trivia_master.png" 
-            alt="Trivia Master" 
-            className="max-w-[200px] w-full h-auto"
+          <Image
+            src="/trivia_master.png"
+            alt="Trivia Master"
+            width={200}
+            height={200}
+            className="max-w-[200px] w-full h-auto object-contain"
           />
         </div>
         <p className="text-white opacity-80 text-center mb-6">

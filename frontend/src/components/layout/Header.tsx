@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth/hooks';
@@ -34,10 +35,12 @@ export function Header() {
     <header className="header">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center">
-          <img
+          <Image
             src="/trivia_master_header.png"
             alt="Trivia Master"
-            className="header__logo"
+            width={180}
+            height={48}
+            className="header__logo object-contain"
           />
         </Link>
         <nav className="flex items-center gap-4">

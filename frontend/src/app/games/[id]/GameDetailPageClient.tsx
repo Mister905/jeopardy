@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import Image from 'next/image';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -70,7 +71,7 @@ export function GameDetailPageClient() {
         dispatch(resetGameState());
       }
     }
-  }, [gameId, currentGameId, game?.id, dispatch]);
+  }, [gameId, currentGameId, game, dispatch]);
 
   // Initialize game data on mount
   useEffect(() => {
@@ -79,7 +80,7 @@ export function GameDetailPageClient() {
         dispatch(fetchGameData(gameId));
       }
     }
-  }, [authLoading, user, gameId, dispatch, game?.id]);
+  }, [authLoading, user, gameId, dispatch, game]);
 
   // Fetch username for display
   useEffect(() => {
@@ -111,7 +112,7 @@ export function GameDetailPageClient() {
       dispatch(startGame(gameId));
       router.replace(`/games/${gameId}`, { scroll: false });
     }
-  }, [game, actionLoading, searchParams, gameId, router]);
+  }, [game, actionLoading, searchParams, gameId, router, dispatch]);
 
   // Handle 401/403 errors - redirect to login
   useEffect(() => {
@@ -410,10 +411,12 @@ export function GameDetailPageClient() {
             {selectedClue?.isDailyDouble && selectedClue.state === 'UNANSWERED' && dailyDoubleStep === 'intro' && (
               <div className="space-y-6 text-center">
                 <div className="flex justify-center">
-                  <img
+                  <Image
                     src="/daily_double.png"
                     alt="Daily Double"
-                    className="max-w-md w-full h-auto"
+                    width={448}
+                    height={200}
+                    className="max-w-md w-full h-auto object-contain"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}

@@ -1,132 +1,302 @@
-# Deployment Runbook
+# Trivia Master – AWS Deployment Guide
 
-This runbook covers prerequisites and steps to deploy the Jeopardy app to a new environment (e.g. AWS: S3 + CloudFront frontend, ECS Fargate backend, ALB, Supabase external).
-
-**Target architecture:** Frontend: S3 + CloudFront (+ optional Route 53). Backend: ECS Fargate + ECR + ALB. Config/ops: SSM Parameter Store or Secrets Manager, CloudWatch Logs. Database: Supabase (external).
+Deployment runbook for the Trivia Master app: backend on ECS Fargate behind an ALB, frontend as static export on S3 + CloudFront, Supabase as external database. Includes environment variables, health checks, and basic monitoring.
 
 ---
 
-## 1. Prerequisites
+## Recommended AWS Services
 
-- **Database:** Supabase project with Postgres and Auth enabled. **Production clues are already ingested and available** with the current Supabase configuration; no ingestion step is needed for deploy unless you are targeting a new database or need to refresh clue data.
-- **Secrets:** Production values for `DATABASE_URL`, Supabase API keys, and (for frontend build) `NEXT_PUBLIC_*` variables. Load backend secrets via ECS task definition (e.g. from SSM Parameter Store or Secrets Manager); do not commit them.
-- **CORS:** Backend `FRONTEND_URL` must match the frontend origin (e.g. CloudFront URL or custom domain). Set this in the backend environment for the deploy.
+| Area | Services |
+|------|----------|
+| **Frontend** | S3 (static build), CloudFront (CDN + HTTPS), Route 53 (optional custom domain) |
+| **Backend** | ECS Fargate (NestJS), ECR (images), Application Load Balancer (routing + health), IAM (least privilege) |
+| **Config & Ops** | SSM Parameter Store / Secrets Manager (secrets), CloudWatch Logs (logging), CloudWatch Alarms (optional) |
+| **Database** | Supabase (external managed Postgres) |
 
----
-
-## 2. Backend: Database migrations
-
-Apply the locked schema to the target database **before** running the backend or ingestion.
-
-1. From the **backend** directory, set `DATABASE_URL` to the target Postgres connection string (e.g. Supabase connection string).
-2. Run:
-   ```bash
-   npx prisma migrate deploy
-   ```
-3. **When to run:** For a new environment, run once. For existing environments, run as part of each release that includes schema changes (e.g. in a release job or manually before deploying the new backend). Do not run migrations at app startup unless you explicitly adopt that strategy (tradeoff: simpler deploy vs. risk of concurrent migrations).
+> **Résumé line:**  
+> “Containerized backend on ECS Fargate, frontend on CloudFront, secrets in SSM/Secrets Manager.”
 
 ---
 
-## 3. Backend: Clue ingestion
+## Why Static Frontend (No SSR)
 
-**Current setup:** Production clues are already ingested and available with the current Supabase configuration. Skip ingestion for normal deploys.
+- App is login-gated and pulls state from the API; no per-page SEO need.
+- SSR would add ECS/operational cost and complexity without improving UX for this use case.
 
-Run ingestion only when:
-- You are deploying to a **new** database (e.g. a new Supabase project) that has no clue data, or
-- You want to **refresh or expand** clue data.
-
-At least one full game’s worth of clue data must be present so users can play. When needed, run ingestion **after** migrations and **before** (or after) starting the backend.
-
-### Option A: Jeopardy + Double Jeopardy
-
-- **Script:** `npm run ingest:jeopardy` (from backend directory).
-- **Behavior:** Parses TSV files under `backend/data/jeopardy_clue_dataset/` and writes parsed JSON, then ingests from `backend/data/jeopardy_clue_dataset/parsed/jeopardy-clues.json`.
-- **Requires:** TSV data in the expected location; see backend data/parsing docs if you add new seasons.
-
-### Option B: Final Jeopardy
-
-- **Script:** `npm run ingest:final-jeopardy` (from backend directory).
-- **Behavior:** Ingests from `backend/data/jeopardy_clue_dataset/parsed/final-jeopardy-clues.json`. If that file does not exist, run the parser first: `npm run parse:final-jeopardy` (and optionally `npm run verify:parsed-output`).
-- **Requires:** Parsed file at the path above, or run the parse script with the correct raw data path.
-
-### Notes
-
-- Set `DATABASE_URL` (and any other env the app needs) when running these scripts.
-- Run ingestion once per new environment, or when you want to refresh/expand clue data. Idempotent: duplicates are skipped.
-- For a minimal deploy, ensure at least enough clues exist for one playable game (Jeopardy + Double Jeopardy + Final Jeopardy as per game rules).
+**Options:** Static export → S3 + CloudFront (recommended) | Next.js server on ECS if you need SSR later.
 
 ---
 
-## 4. Backend: Environment variables
+## Production Environment Variables
 
-Set these in the backend runtime (e.g. ECS task definition, from SSM/Secrets Manager):
+| Component | Variable | Purpose |
+|-----------|----------|---------|
+| Backend | `DATABASE_URL` | Supabase Postgres connection string |
+| Backend | `SUPABASE_URL` | Supabase API URL |
+| Backend | `SUPABASE_ANON_KEY` | Supabase anon key |
+| Backend | `SUPABASE_JWT_SECRET` | JWT verification |
+| Backend | `FRONTEND_URL` | Allowed CORS origin (e.g. CloudFront URL) |
+| Backend | `PORT` | Listen port (default `3000`) |
+| Frontend | `NEXT_PUBLIC_API_URL` | Backend base URL (ALB or custom domain) |
+| Frontend | `NEXT_PUBLIC_SUPABASE_URL` | Supabase client URL |
+| Frontend | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 
-| Variable           | Required | Description |
-|--------------------|----------|-------------|
-| `DATABASE_URL`     | Yes      | Postgres connection string (Supabase). |
-| `SUPABASE_URL`     | Yes      | Supabase project URL (Auth). |
-| `SUPABASE_ANON_KEY`| Yes      | Supabase anon key (Auth). |
-| `SUPABASE_JWT_SECRET` | Yes   | Supabase JWT secret (Auth verification). |
-| `PORT`             | No       | Port the app listens on (default `3000`). ECS/ALB must use the same port. |
-| `FRONTEND_URL`     | Yes (prod) | Allowed CORS origin (e.g. CloudFront or custom domain). |
-
----
-
-## 5. Backend: Health check
-
-- **Path:** `GET /health`
-- **Response:** `200` with body `{ "status": "ok" }`. No auth required.
-- **Use:** Configure ALB target group health checks and ECS container health checks to use this path so tasks are marked healthy.
+**Backend:** Prefer SSM Parameter Store (SecureString) or Secrets Manager; reference in task definition via `secrets` so values are injected at task start.  
+**Frontend:** Set at **build time**; static export bakes `NEXT_PUBLIC_*` into the bundle.
 
 ---
 
-## 6. Frontend: Build-time environment variables
+# Backend Deployment
 
-The frontend is built as a **static export** (Next.js `output: 'export'`). All `NEXT_PUBLIC_*` variables are inlined at **build** time. You must set production values when running the production build; they cannot be changed at runtime.
+## Overview
 
-| Variable                         | Required | Description |
-|----------------------------------|----------|-------------|
-| `NEXT_PUBLIC_API_URL`            | Yes      | Backend base URL (e.g. `https://api.yourdomain.com`). Used for all API calls. |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Yes      | Supabase project URL (same as backend Supabase). |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Yes      | Supabase anon key (same as backend). |
+- **ECS Cluster** (Fargate) runs the NestJS container.
+- **ALB** fronts the service; target group health check uses `GET /health` on port 3000.
+- **Security groups:** ALB allows 80/443 from internet; ECS tasks allow **inbound TCP 3000 from the ALB security group only**.
 
-**Example (build from frontend directory):**
+## Prerequisites
+
+- VPC with at least two subnets (e.g. public or private depending on design).
+- ALB and target group (port 3000, health path `/health`) created and listener attached.
+- Execution role for ECS (ECR pull, CloudWatch Logs, SSM read if using secrets from Parameter Store).
+
+## Step 1: Database migrations
+
+Run migrations against the target database **before** deploying the new backend.
 
 ```bash
-export NEXT_PUBLIC_API_URL=https://api.yourdomain.com
-export NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-export NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-npm run build
+cd backend
+export DATABASE_URL="<Supabase connection string>"
+npx prisma migrate deploy
 ```
 
-The static output is in `frontend/out/`. Upload the contents of `out/` to S3 and serve via CloudFront. Configure CloudFront error pages (e.g. 404 → index.html) for SPA-style client-side routing if users hit deep links.
+## Step 2: Build and push the production image
+
+Use **`Dockerfile.prod`** (not the dev Dockerfile). The app listens on `0.0.0.0:3000`.
+
+```bash
+cd backend
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+# --platform linux/amd64 ensures the image runs on ECS Fargate (x86_64); required on ARM Macs (M1/M2)
+docker buildx build --platform linux/amd64 -f Dockerfile.prod -t trivia-master-backend:latest .
+docker tag trivia-master-backend:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:latest
+```
+
+### Build Architecture Considerations (ARM vs x86_64)
+
+- Macs with M1/M2 chips (ARM64) build ARM images by default.
+- ECS Fargate expects x86_64 images unless the task definition explicitly uses ARM/Graviton.
+- Using an ARM64 image on x86_64 Fargate fails with `exec format error`.
+- The sequence above uses `docker buildx build --platform linux/amd64` so the image is compatible on both ARM and x86_64 build hosts. In CI/CD on ARM agents, always use `--platform linux/amd64` for Fargate.
+
+## Step 3: Secrets (SSM Parameter Store)
+
+Store sensitive values as SecureString parameters; the task definition references them so ECS injects them at container start.
+
+```bash
+aws ssm put-parameter --name "/trivia-master-backend/DATABASE_URL" \
+  --type SecureString --value "<connection-string>" --region us-east-1
+# Repeat for SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET, FRONTEND_URL as needed.
+```
+
+Ensure the **task execution role** has `ssm:GetParameters` (and `kms:Decrypt` if using KMS) on these parameters. See `docs/ecs-secrets-guide.md` and `docs/iam-ecs-execution-ssm-policy.json` if needed.
+
+## Step 4: ECS cluster, ECR, task definition, and service
+
+**Option A – Use repo task definition JSON (recommended for consistency):**
+
+```bash
+cd backend
+aws ecs register-task-definition --cli-input-json file://ecs-task-backend.json --region us-east-1
+
+aws ecs update-service \
+  --cluster trivia-master-backend-cluster \
+  --service trivia-master-backend-service \
+  --task-definition trivia-master-backend-task \
+  --desired-count 1 \
+  --force-new-deployment \
+  --region us-east-1
+```
+
+**Option B – Full AWS CLI sequence (first-time or one-off setup):**
+
+```bash
+export AWS_REGION="us-east-1"
+
+# ECS service-linked role (required for Fargate)
+aws iam get-role --role-name AWSServiceRoleForECS || \
+  aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com
+
+# Create ECS cluster
+aws ecs create-cluster \
+  --cluster-name trivia-master-backend-cluster \
+  --capacity-providers FARGATE \
+  --settings name=containerInsights,value=enabled \
+  --region us-east-1
+
+# Create ECR repository (if needed)
+aws ecr create-repository \
+  --repository-name trivia-master-backend \
+  --region us-east-1
+
+# Login Docker to ECR (replace <ACCOUNT_ID> with your AWS account ID)
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+# Build and push image (use Dockerfile.prod for production)
+docker build -f Dockerfile.prod -t trivia-master-backend ./backend
+docker tag trivia-master-backend:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:latest
+
+# Register task definition (inline; replace placeholders or use file://ecs-task-backend.json)
+aws ecs register-task-definition \
+  --family trivia-master-backend-task \
+  --network-mode awsvpc \
+  --requires-compatibilities FARGATE \
+  --cpu "256" \
+  --memory "512" \
+  --execution-role-arn arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole \
+  --task-role-arn arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole \
+  --container-definitions '[
+    {
+      "name": "trivia-master-backend",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:latest",
+      "portMappings": [{"containerPort": 3000}],
+      "environment": [
+        {"name": "PORT", "value": "3000"},
+        {"name": "NODE_ENV", "value": "production"}
+      ],
+      "secrets": [
+        {"name": "DATABASE_URL", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/DATABASE_URL"},
+        {"name": "SUPABASE_URL", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/SUPABASE_URL"},
+        {"name": "SUPABASE_ANON_KEY", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/SUPABASE_ANON_KEY"},
+        {"name": "SUPABASE_JWT_SECRET", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/SUPABASE_JWT_SECRET"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/trivia-master-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]' \
+  --region us-east-1
+
+# Create ECS service (replace $SUBNET1_ID, $SUBNET2_ID, $ECS_SG_ID, $TG_ARN with your values)
+aws ecs create-service \
+  --cluster trivia-master-backend-cluster \
+  --service-name trivia-master-backend-service \
+  --task-definition trivia-master-backend-task \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET1_ID,$SUBNET2_ID],securityGroups=[$ECS_SG_ID],assignPublicIp=ENABLED}" \
+  --load-balancers "targetGroupArn=$TG_ARN,containerName=trivia-master-backend,containerPort=3000" \
+  --region us-east-1
+
+# Output ALB DNS (replace $ALB_ARN or use your ALB name)
+ALB_DNS=$(aws elbv2 describe-load-balancers \
+  --names trivia-master-backend-alb \
+  --query 'LoadBalancers[0].DNSName' --output text)
+echo "Backend ALB: http://$ALB_DNS"
+```
+
+**Task definition must include:** `containerPort` 3000, `secrets` (or env) for required vars, CloudWatch log configuration; for ECS Exec, a valid `taskRoleArn` with SSM permissions.
+
+## Backend health check
+
+- **Path:** `GET /health` → `200` with `{"status":"ok"}`.
+- **ALB target group:** Health check path `/health`, port 3000, HTTP.
+- **Security:** ECS task security group must allow **inbound TCP 3000 from the ALB security group**; otherwise targets stay unhealthy and the ALB returns empty or 5xx.
+
+**Verify via the ALB (backend is not reachable by private IP from your machine):**
+
+```bash
+# Get ALB DNS (or use your known ALB DNS / custom domain)
+ALB_DNS=$(aws elbv2 describe-load-balancers \
+  --names trivia-master-backend-alb \
+  --query 'LoadBalancers[0].DNSName' --output text)
+
+curl -i "http://$ALB_DNS/health"
+```
+
+Expect `200 OK` and body `{"status":"ok"}`.
+
+**Optional – verify from inside the container (e.g. when debugging ALB vs app):**
+
+```bash
+TASK_ARN=$(aws ecs list-tasks --cluster trivia-master-backend-cluster \
+  --service-name trivia-master-backend-service --desired-status RUNNING \
+  --region us-east-1 --query 'taskArns[0]' --output text)
+
+aws ecs execute-command \
+  --cluster trivia-master-backend-cluster \
+  --task $TASK_ARN \
+  --container trivia-master-backend \
+  --interactive --command "/bin/sh" \
+  --region us-east-1
+```
+
+Inside the container run: `wget -q -O - http://127.0.0.1:3000/health` (or `curl -s http://127.0.0.1:3000/health`). Use `exit` to leave the shell. ECS Exec must be enabled on the service; see `docs/ecs-service-fix-and-exec.md` if needed.
 
 ---
 
-## 7. Deploy order (summary)
+# Frontend Deployment
 
-1. Apply migrations: `npx prisma migrate deploy` (backend, with `DATABASE_URL` set).
-2. **If** the target database has no clue data: run clue ingestion (e.g. `npm run ingest:jeopardy`, `npm run ingest:final-jeopardy`). For the current Supabase config, clues are already ingested—skip this step.
-3. Set backend env (including `FRONTEND_URL` for CORS).
-4. Start backend (e.g. deploy to ECS; health check path: `GET /health`).
-5. Set frontend build-time env (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-6. Build frontend: `npm run build` (in frontend directory).
-7. Deploy frontend: upload `frontend/out/` to S3 and configure CloudFront.
+*(To be updated as you go. Static export → S3 + CloudFront.)*
 
 ---
 
-## 8. Optional: Smoke check
+# Health verification
 
-After deploy, verify:
+## Via the ALB (recommended)
 
-- Backend: `curl https://api.yourdomain.com/health` returns `{ "status": "ok" }`.
-- Frontend: Open app, sign in (Supabase), create a game, start the game, open a clue. Confirms API URL, CORS, and Supabase auth.
+The backend is not reachable by private IP from your laptop. Use the ALB as the single public endpoint:
+
+```bash
+curl -i https://<your-alb-dns-or-domain>/health
+```
+
+Expect `200 OK` and `{"status":"ok"}`. If not, check target group health and security groups (ALB → tasks on port 3000).
+
+## From inside the container (optional)
+
+To confirm the app responds on port 3000 inside the task (e.g. when debugging ALB vs app):
+
+```bash
+TASK_ARN=$(aws ecs list-tasks --cluster trivia-master-backend-cluster \
+  --service-name trivia-master-backend-service --desired-status RUNNING \
+  --region us-east-1 --query 'taskArns[0]' --output text)
+
+aws ecs execute-command \
+  --cluster trivia-master-backend-cluster \
+  --task $TASK_ARN \
+  --container trivia-master-backend \
+  --interactive --command "/bin/sh" \
+  --region us-east-1
+```
+
+Inside the container: `wget -q -O - http://127.0.0.1:3000/health` (or `curl -s http://127.0.0.1:3000/health`). Use `exit` to leave the shell. ECS Exec must be enabled on the service and the task role must have SSM permissions; see `docs/ecs-service-fix-and-exec.md` if needed.
 
 ---
 
-## References
+# Monitoring and operations
 
-- **Env template:** `.env.example` at repo root (backend and frontend vars).
-- **Backend production image:** `backend/Dockerfile.prod` (multi-stage build; run with `node dist/main`).
-- **Feature 0020 (Minimum Deploy Readiness):** `docs/features/0020_PLAN.md`.
-- **Feature 0021 (Deployment Alignment):** `docs/features/0021_PLAN.md`.
+- **Logs:** CloudWatch log group `/ecs/trivia-master-backend`. Tail: `aws logs tail /ecs/trivia-master-backend --follow --region us-east-1`.
+- **Health:** ALB target group health and `GET /health` as above.
+- **Metrics:** ECS task CPU/memory in the ECS console or CloudWatch; add alarms or scaling later as needed.
+- **Secrets:** Keep backend secrets in SSM or Secrets Manager; never commit them. Rotate as needed.
+
+**Iteration:** Start with logs + ALB health; then add basic metrics and alarms or auto-scaling when required.
+
+---
+
+# CI/CD notes
+
+- **Backend:** Pipeline can build from `Dockerfile.prod`, push to ECR, then run `aws ecs update-service ... --force-new-deployment` (or register a new task definition revision and update the service).
+- **Frontend:** Build with production `NEXT_PUBLIC_*` env vars, then sync `out/` to S3 and invalidate CloudFront cache for the deployed paths.
+- Use a single branch or tag for production; keep secrets in the CI environment or a secrets store, not in repo.

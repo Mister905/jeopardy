@@ -31,6 +31,7 @@ async function bootstrap() {
     }),
   );
   
-  await app.listen(process.env.PORT ?? 3000);
+  // <-- Bind to 0.0.0.0 so ALB can reach the container
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

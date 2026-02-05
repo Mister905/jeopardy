@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useRequireAuth } from '@/lib/auth/hooks';
+import { useRequireAuth, signOutAndRedirectToLogin } from '@/lib/auth/hooks';
 import { GameList } from '@/components/game/GameList';
 import { createGame, listGames, endGame } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
@@ -14,6 +14,8 @@ export default function HomePage() {
   const [gamesData, setGamesData] = useState<ListGamesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creatingGame, setCreatingGame] = useState(false);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -31,7 +33,7 @@ export default function HomePage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
-          router.push('/auth/login');
+          await signOutAndRedirectToLogin(router);
           return;
         }
         setError(err.message);
@@ -45,29 +47,31 @@ export default function HomePage() {
 
   const handleCreateGame = async () => {
     setError(null);
-    // Navigate immediately - the game detail page will handle loading state
-    // We'll create the game on the game detail page to avoid showing spinner here
+    setAuthError(false);
+    setCreatingGame(true);
     try {
-      // Retrieve username from localStorage if available
       const username = localStorage.getItem('pendingUsername') || undefined;
       const newGame = await createGame(username);
-      // Clear pending username after successful game creation
       if (username) {
         localStorage.removeItem('pendingUsername');
       }
-      // Navigate immediately - the game detail page will clear old state and show loading
-      // Automatically start the game after creation
-      router.push(`/games/${newGame.id}?autoStart=true`);
+      window.location.href = `/games/${newGame.id}?autoStart=true`;
     } catch (err) {
       if (err instanceof ApiClientError) {
+        console.warn('[Trivia] Create game failed:', err.statusCode, err.message);
         if (err.statusCode === 401) {
-          router.push('/auth/login');
+          setAuthError(true);
+          setError(
+            'Authorization failed. The app may not be sending your sign-in token to the server. Try signing in again, or check that the deployment forwards the Authorization header for /api requests.'
+          );
           return;
         }
         setError(err.message);
       } else {
         setError('Failed to create game. Please try again.');
       }
+    } finally {
+      setCreatingGame(false);
     }
   };
 
@@ -89,6 +93,11 @@ export default function HomePage() {
     return null; // useRequireAuth handles redirect
   }
 
+  // Don't render game list when no user (e.g. after logout); useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
+
   return (
     <div>
       <GameList
@@ -96,8 +105,12 @@ export default function HomePage() {
         loading={loading}
         error={error}
         onCreateGame={handleCreateGame}
-        creatingGame={false}
+        creatingGame={creatingGame}
         onEndGame={handleEndGame}
+        errorActionLabel={authError ? 'Sign in again' : undefined}
+        onErrorAction={
+          authError ? () => signOutAndRedirectToLogin(router) : undefined
+        }
       />
     </div>
   );

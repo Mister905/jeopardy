@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useRequireAuth } from '@/lib/auth/hooks';
+import { useRequireAuth, signOutAndRedirectToLogin } from '@/lib/auth/hooks';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   fetchGameData,
@@ -98,28 +98,52 @@ export function GameDetailPageClient() {
     await dispatch(startGame(gameId));
   };
 
-  // Auto-start game if requested via query parameter
+  // Auto-start game if requested via query parameter (use URL as fallback for static export/full loads)
   useEffect(() => {
-    const autoStart = searchParams?.get('autoStart') === 'true';
+    const fromQuery = searchParams?.get('autoStart') === 'true';
+    const fromUrl =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('autoStart') === 'true';
+    const autoStart = fromQuery || fromUrl;
+
     if (
-      autoStart &&
-      !autoStartAttempted.current &&
-      game &&
-      game.state === 'PENDING' &&
-      !actionLoading
+      !autoStart ||
+      autoStartAttempted.current ||
+      !game ||
+      game.state !== 'PENDING' ||
+      actionLoading
     ) {
-      autoStartAttempted.current = true;
-      dispatch(startGame(gameId));
-      router.replace(`/games/${gameId}`, { scroll: false });
+      return;
     }
+
+    autoStartAttempted.current = true;
+
+    (async () => {
+      try {
+        const result = await dispatch(startGame(gameId));
+        if (startGame.fulfilled.match(result)) {
+          router.replace(`/games/${gameId}`, { scroll: false });
+        }
+      } catch {
+        // Leave URL and error state; user can tap "Start Game" to retry
+      }
+    })();
   }, [game, actionLoading, searchParams, gameId, router, dispatch]);
 
-  // Handle 401/403 errors - redirect to login
+  // Track auth errors so we show "Sign in again" instead of redirecting immediately (user can read the error)
+  const [showSignInAgain, setShowSignInAgain] = useState(false);
   useEffect(() => {
-    if (error && typeof error === 'string' && error.includes('access denied')) {
-      router.push('/auth/login');
+    if (error && typeof error === 'string') {
+      const lower = error.toLowerCase();
+      if (lower.includes('access denied') || lower.includes('unauthorized') || lower.includes('authorization')) {
+        setShowSignInAgain(true);
+      } else {
+        setShowSignInAgain(false);
+      }
+    } else {
+      setShowSignInAgain(false);
     }
-  }, [error, router]);
+  }, [error]);
 
   const handleClueClick = (clueId: string, gameClueId: string) => {
     dispatch(selectClue({ clueId, gameClueId }));
@@ -179,14 +203,19 @@ export function GameDetailPageClient() {
   if (error && !game) {
     return (
       <div>
-        <ErrorDisplay error={error} />
-        <Button
-          onClick={() => router.push('/')}
-          className="mt-4"
-          variant="secondary"
-        >
-          Back to Games
-        </Button>
+        <ErrorDisplay
+          error={error}
+          actionLabel={showSignInAgain ? 'Sign in again' : undefined}
+          onAction={showSignInAgain ? () => signOutAndRedirectToLogin(router) : undefined}
+        />
+        <div className="mt-4 flex gap-2">
+          <Button
+            onClick={() => router.push('/')}
+            variant="secondary"
+          >
+            Back to Games
+          </Button>
+        </div>
       </div>
     );
   }
@@ -208,11 +237,17 @@ export function GameDetailPageClient() {
       )}
 
       {error && (
-        <div className="flex items-center justify-between">
-          <ErrorDisplay error={error} />
-          <Button onClick={() => dispatch(clearError())} variant="secondary" className="ml-4">
-            Dismiss
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ErrorDisplay
+            error={error}
+            actionLabel={showSignInAgain ? 'Sign in again' : undefined}
+            onAction={showSignInAgain ? () => signOutAndRedirectToLogin(router) : undefined}
+          />
+          {!showSignInAgain && (
+            <Button onClick={() => dispatch(clearError())} variant="secondary" className="shrink-0">
+              Dismiss
+            </Button>
+          )}
         </div>
       )}
 
@@ -228,7 +263,11 @@ export function GameDetailPageClient() {
               <h2 className="text-2xl font-bold mb-4 text-white">Ready to Start</h2>
               {error && (
                 <div className="mb-4">
-                  <ErrorDisplay error={error} />
+                  <ErrorDisplay
+                    error={error}
+                    actionLabel={showSignInAgain ? 'Sign in again' : undefined}
+                    onAction={showSignInAgain ? () => signOutAndRedirectToLogin(router) : undefined}
+                  />
                 </div>
               )}
               <Button

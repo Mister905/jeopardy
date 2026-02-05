@@ -20,11 +20,9 @@ export function Header() {
     setSigningOut(true);
     try {
       await dispatch(signOutUser());
-      // Redirect even if there's an error (user should still be logged out locally)
       window.location.href = '/auth/login';
     } catch (err) {
       console.error('Sign out error:', err);
-      // Still redirect to login page
       window.location.href = '/auth/login';
     } finally {
       setSigningOut(false);

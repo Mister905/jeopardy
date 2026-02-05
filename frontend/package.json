@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "export": "next export",
+    "deploy": "npm run build && aws s3 sync out/ s3://trivia-master-frontend/ --delete --region us-east-1 --profile admin && aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DIST_ID:-E3PQNFIR6EXJ2L} --paths '/*' --region us-east-1 --profile admin",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",

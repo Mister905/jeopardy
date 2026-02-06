@@ -183,6 +183,7 @@ Pipelines run on **push to `main`** via GitHub Actions (`.github/workflows/backe
 - **NEXT_PUBLIC_API_URL** must be the CloudFront URL when ALB is CloudFront-only; otherwise the browser cannot reach the API.
 - **CloudFront Function:** After changing the viewer-request function code in the Console, **Publish** the function; otherwise the old LIVE version keeps running.
 - **Path pattern for games:** Use **/games/*** (with leading slash) so requests like `/games/abc123` match the behavior that has the rewrite function.
+- **/api/health returns 200 with HTML (from S3):** Add a cache behavior for `/api*` → ALB origin, with precedence above Default (*). Ensure the ALB has a listener on port 80 (or 443) forwarding to the target group—CloudFront’s origin uses port 80; if the ALB only listens on another port, the origin fails and CloudFront falls back to the default (S3).
 - **Backend 503 / unhealthy:** Check target group health path is `/api/health`; check ECS task security group allows TCP 3000 from the ALB security group; check container listens on `0.0.0.0:3000`.
 - **Supabase “Cannot reach”:** Restore project if paused; verify API URL and anon key; ensure Redirect URLs include the CloudFront URL.
 

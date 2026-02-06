@@ -1,5 +1,5 @@
 # Production Dockerfile for NestJS backend (ECS/Fargate).
-# Builds the app and runs node dist/main. Connects to Supabase Postgres via DATABASE_URL.
+# Builds the app and runs node dist/src/main.js (Nest default output). Connects to Supabase Postgres via DATABASE_URL.
 
 # Stage 1: build
 FROM node:20-alpine AS builder
@@ -26,4 +26,4 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]

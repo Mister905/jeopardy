@@ -188,3 +188,51 @@ For creating cluster, ECR repo, task definition, and service from scratch, use `
 
 - **Logs:** CloudWatch log group `/ecs/trivia-master-backend`; `aws logs tail /ecs/trivia-master-backend --follow --region us-east-1`.
 - **Health:** ALB target group and `GET /api/health` as in Validation.
+
+---
+
+## Observability, Reliability, and Operational Validation
+
+These activities validate that logs, metrics, health checks, and failure modes are visible and correctly interpreted. NestJS does not log every HTTP request by default; seeing startup and error logs (not per-request lines) is expected unless request logging is added at the app level.
+
+### 1. Backend logs in CloudWatch
+
+- **Purpose:** Confirm ECS → CloudWatch log delivery and that application output (startup, errors) is visible.
+- **Console:** CloudWatch → Log groups → `/ecs/trivia-master-backend` → open the most recent log stream. Check for recent timestamps and NestJS output (e.g. "Nest application successfully started").
+- **CLI:** `aws logs tail /ecs/trivia-master-backend --follow --region us-east-1 --profile admin`. You may not see a new line for every request unless request logging is enabled in the app.
+- **Success:** At least one log stream with recent timestamps and app-generated logs; traffic to the backend confirmed (e.g. 200 from CloudFront `/api/health`).
+
+### 2. CloudWatch Logs Insights
+
+- **Purpose:** Query backend logs by time and content (errors, recent messages) without scanning streams by hand.
+- **Steps:** CloudWatch → Logs → Logs Insights. Select log group `/ecs/trivia-master-backend`, set time range (e.g. Last 1 hour).
+- **Query — recent messages:** `fields @timestamp, @message | sort @timestamp desc | limit 50`
+- **Query — errors (case-insensitive):** `fields @timestamp, @message | filter @message like /(?i)error/ | sort @timestamp desc | limit 20`
+- **Success:** First query returns app-like rows; second returns error lines or empty. Both confirm you can filter by content.
+
+### 3. ALB target health
+
+- **Purpose:** See how the ALB sees ECS tasks (healthy vs unhealthy) and why the API might be down or flapping.
+- **Console:** EC2 → Target groups → backend target group (e.g. `trivia-master-backend-tg`) → Targets tab. Note health status and, in Details, health check path (`/api/health`) and port (e.g. 3000).
+- **CLI:**
+  ```bash
+  TG_ARN=$(aws elbv2 describe-target-groups --region us-east-1 --profile admin \
+    --query 'TargetGroups[?contains(TargetGroupName,`trivia-master`)].TargetGroupArn' --output text)
+  aws elbv2 describe-target-health --target-group-arn "$TG_ARN" --region us-east-1 --profile admin
+  aws elbv2 describe-target-groups --target-group-arns "$TG_ARN" --region us-east-1 --profile admin \
+    --query 'TargetGroups[0].{HealthCheckPath:HealthCheckPath,HealthCheckPort:HealthCheckPort,Port:Port}'
+  ```
+- **Success:** At least one target Healthy; health check path `/api/health`. Healthy = ALB sends traffic; Unhealthy = ALB stops after failed checks; Initial = still in first checks.
+
+### 4. ALB and CloudFront metrics (edge vs origin)
+
+- **Purpose:** Distinguish edge (CloudFront) from origin (ALB/backend) when users see 5xx or slowness.
+- **CloudFront (edge):** CloudWatch → Metrics → All metrics → **CloudFront** → By distribution. Select your **distribution ID** (e.g. from `aws cloudfront list-distributions`). Add **Requests**, **5xxErrorRate**. CloudFront metrics exist only in **us-east-1**. Optional: add a dashboard (e.g. Trivia-Master-Ops) with a widget; use the correct DistributionId or the graph shows no data.
+- **ALB (origin):** Metrics → **Application ELB** → By Load Balancer → select your ALB. Add **RequestCount**, **HTTPCode_ELB_5XX_Count**, **HTTPCode_Target_5XX_Count**, **TargetResponseTime**.
+- **Interpretation:** High CloudFront 5xxErrorRate + high origin latency → origin problem. High **HTTPCode_ELB_5XX_Count** → no healthy targets or timeouts. High **HTTPCode_Target_5XX_Count** → backend returning 5xx; check ECS/CloudWatch logs.
+
+### 5. Validate /api/health through CloudFront
+
+- **Purpose:** Confirm the health endpoint is reachable on the same path users use (CloudFront → ALB → backend).
+- **Step:** `curl -i https://<cloudfront-domain>/api/health`
+- **Success:** HTTP 200 and body `{"status":"ok"}` (or your backend’s response). No 502/503/504. If health works only when hitting the ALB directly but not via CloudFront, target health can be healthy while user traffic fails.

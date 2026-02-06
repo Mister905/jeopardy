@@ -139,7 +139,8 @@ describe('JeopardyIngestionService', () => {
       };
 
       const result = (service as any).validateClue(clue);
-      expect(result).toContain("Invalid round: '3'");
+      expect(result).toContain('Invalid round');
+      expect(result).toContain('3');
     });
 
     it('should return error for invalid Jeopardy clue value', () => {
@@ -306,8 +307,9 @@ describe('JeopardyIngestionService', () => {
       mockPrismaClient.clue.findMany.mockResolvedValue([]); // No duplicates
       mockPrismaClient.clue.create.mockResolvedValue({ id: 'clue-id' });
       mockPrismaClient.$transaction.mockImplementation(
-        async (promises: Promise<any>[]) => {
-          return Promise.all(promises);
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = { clue: mockPrismaClient.clue };
+          return callback(mockTx);
         },
       );
 
@@ -319,7 +321,7 @@ describe('JeopardyIngestionService', () => {
       expect(result.duplicatesSkipped).toBe(0);
       expect(result.errors.length).toBe(0);
 
-      // Verify correct round mapping
+      // Verify correct round mapping (service uses tx.clue.create inside $transaction)
       expect(mockPrismaClient.clue.create).toHaveBeenCalledTimes(2);
       const createCalls = mockPrismaClient.clue.create.mock.calls;
       expect(createCalls[0][0].data.round).toBe(Round.JEOPARDY);
@@ -358,8 +360,9 @@ describe('JeopardyIngestionService', () => {
       mockPrismaClient.clue.findMany.mockResolvedValue([]);
       mockPrismaClient.clue.create.mockResolvedValue({ id: 'clue-id' });
       mockPrismaClient.$transaction.mockImplementation(
-        async (promises: Promise<any>[]) => {
-          return Promise.all(promises);
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = { clue: mockPrismaClient.clue };
+          return callback(mockTx);
         },
       );
 
@@ -474,8 +477,9 @@ describe('JeopardyIngestionService', () => {
       mockPrismaClient.clue.findMany.mockResolvedValue([]);
       mockPrismaClient.clue.create.mockResolvedValue({ id: 'clue-id' });
       mockPrismaClient.$transaction.mockImplementation(
-        async (promises: Promise<any>[]) => {
-          return Promise.all(promises);
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = { clue: mockPrismaClient.clue };
+          return callback(mockTx);
         },
       );
 

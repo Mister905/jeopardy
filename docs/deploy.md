@@ -153,6 +153,22 @@ Or use the npm script if defined: `npm run deploy` (must include `--profile admi
 
 ---
 
+## Preflight (CI/CD)
+
+Before the first CI/CD run or after changing AWS resources or GitHub Actions secrets, complete the checklist in **`docs/preflight_cicd.md`**: verify AWS resources (ECS, ECR, ALB/target group, S3 versioning, CloudFront, IAM), then GitHub secrets/variables (AWS credentials, ECR_URI, ECS_*, S3_BUCKET, CLOUDFRONT_DIST_ID, NEXT_PUBLIC_*). Optional: confirm health via CloudFront and S3 version restore. All required items (sections 1 and 2) must pass before pushing to `main` or triggering workflows.
+
+---
+
+## CI/CD
+
+Pipelines run on **push to `main`** via GitHub Actions (`.github/workflows/backend-deploy.yml`, `.github/workflows/frontend-deploy.yml`). Credentials use GitHub Actions secrets. If any step fails, later steps do not run—no partial deploy (safe-by-default).
+
+**Backend:** Install deps → run tests → build Docker image (linux/amd64) → push to ECR (deterministic tag + optional `:latest`) → ECS `update-service --force-new-deployment`. If tests or Docker push fail, ECS is not updated. **Rollback:** Re-deploy previous image (update task definition to previous image tag and run `update-service --task-definition <family>:<revision> --force-new-deployment`, or re-run workflow from previous commit). Verify: `curl -i https://<cloudfront-domain>/api/health` → 200 and `{"status":"ok"}`.
+
+**Frontend:** Install deps → build static export (`NEXT_PUBLIC_*` from secrets at build time; changing them requires a rebuild) → sync `out/` to S3 → CloudFront invalidation. If build fails, S3 sync does not run. S3 versioning must be enabled for rollback. **Rollback:** Restore previous S3 object versions for the frontend bucket, then `aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths '/*'`.
+
+---
+
 ## Validation Checklist
 
 - [ ] `curl -I https://<cloudfront-domain>/` → 200 (frontend).

@@ -20,6 +20,7 @@ describe('GameService', () => {
       },
       game: {
         create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
       },
       finalJeopardy: {

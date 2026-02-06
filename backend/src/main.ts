@@ -4,10 +4,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  // All routes under /api so CloudFront can send only /api/* to backend (SPA routes like /games/:id stay on frontend)
-  app.setGlobalPrefix('api');
-
+  
   // Enable CORS for frontend requests
   const frontendUrl = process.env.FRONTEND_URL;
   const allowedOrigins = frontendUrl

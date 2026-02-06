@@ -19,9 +19,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="icon" href="/trivia_master.png" type="image/png" />
-      </head>
       <body className="app-root" suppressHydrationWarning>
         <Provider store={store}>
           <Header />

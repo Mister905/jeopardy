@@ -15,9 +15,9 @@ interface GameListProps {
   onCreateGame: () => void;
   creatingGame: boolean;
   onEndGame?: (gameId: string) => Promise<void>;
-  /** Shown on error alert when provided (e.g. "Sign in again" for 401) */
+  /** Optional label and handler for error state (e.g. "Sign in again") */
   errorActionLabel?: string;
-  onErrorAction?: () => void;
+  onErrorAction?: () => void | Promise<void>;
 }
 
 export function GameList({
@@ -60,7 +60,6 @@ export function GameList({
     return (
         <div className="text-center py-12">
         <button
-          type="button"
           onClick={onCreateGame}
           disabled={creatingGame}
           className="game-list__create-btn inline-flex items-center justify-center gap-2 px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
@@ -77,7 +76,6 @@ export function GameList({
       <div className="flex justify-end items-center mb-6">
         {!hasGameInProgress && (
           <button
-            type="button"
             onClick={onCreateGame}
             disabled={creatingGame}
             className="game-list__new-game-btn inline-flex items-center justify-center gap-2 px-6 py-2 rounded-lg disabled:opacity-50 border-2 transition-colors hover:border-blue-400"

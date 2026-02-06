@@ -1,9 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { supabase, SUPABASE_NOT_CONFIGURED_MESSAGE } from '@/lib/auth/supabase';
+import { supabase } from '@/lib/auth/supabase';
 import type { AuthenticatedUser } from '@/types/auth';
-
-const NOT_CONFIGURED_MSG =
-  'Supabase is not configured. Rebuild the app with NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY set in frontend/.env, then redeploy.';
 
 interface AuthState {
   signInLoading: boolean;
@@ -43,11 +40,12 @@ export const signUpUser = createAsyncThunk(
         } else if (error.message.includes('Invalid email')) {
           errorMessage = 'Please enter a valid email address.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          // Check if Supabase is configured
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
-            errorMessage = 'Supabase is not configured. Rebuild the app with NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY set, then redeploy.';
+            errorMessage = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.';
           } else {
-            errorMessage = 'Cannot reach Supabase. Check your connection, that the Supabase project is active, and that this site’s URL is allowed in Supabase (Authentication → URL Configuration). Open the browser console (F12) and try again to see the exact error.';
+            errorMessage = 'Connection error. Please check your internet connection and try again.';
           }
         }
 
@@ -70,21 +68,22 @@ export const signUpUser = createAsyncThunk(
         requiresVerification: false,
       };
     } catch (err) {
+      // Handle network errors and other exceptions
       let errorMessage = 'Connection error. Please check your internet and try again.';
+      
       if (err instanceof Error) {
-        if (err.message === SUPABASE_NOT_CONFIGURED_MESSAGE) {
-          errorMessage = NOT_CONFIGURED_MSG;
-        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
-            errorMessage = NOT_CONFIGURED_MSG;
+            errorMessage = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.';
           } else {
-            errorMessage = 'Cannot reach Supabase. Check your connection, that the project is active, and URL Configuration in Supabase. Open the browser console (F12) and try again to see the exact error.';
+            errorMessage = 'Connection error. Please check your internet connection and try again.';
           }
         } else {
           errorMessage = err.message;
         }
       }
+
       return rejectWithValue({ error: errorMessage });
     }
   },
@@ -112,14 +111,13 @@ export const signInUser = createAsyncThunk(
           errorMessage = 'Please verify your email before signing in.';
         } else if (error.message.includes('Too many requests')) {
           errorMessage = 'Too many sign in attempts. Please try again later.';
-        } else if (error.message === SUPABASE_NOT_CONFIGURED_MESSAGE) {
-          errorMessage = NOT_CONFIGURED_MSG;
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          // Check if Supabase is configured
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
-            errorMessage = NOT_CONFIGURED_MSG;
+            errorMessage = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.';
           } else {
-            errorMessage = 'Cannot reach Supabase. Check your connection, that the Supabase project is active, and that this site’s URL is allowed in Supabase (Authentication → URL Configuration). Open the browser console (F12) and try again to see the exact error.';
+            errorMessage = 'Connection error. Please check your internet connection and try again.';
           }
         }
 
@@ -136,21 +134,22 @@ export const signInUser = createAsyncThunk(
         error: 'Please verify your email before signing in.',
       });
     } catch (err) {
+      // Handle network errors and other exceptions
       let errorMessage = 'Connection error. Please check your internet and try again.';
+      
       if (err instanceof Error) {
-        if (err.message === SUPABASE_NOT_CONFIGURED_MESSAGE) {
-          errorMessage = NOT_CONFIGURED_MSG;
-        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
-            errorMessage = NOT_CONFIGURED_MSG;
+            errorMessage = 'Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.';
           } else {
-            errorMessage = 'Cannot reach Supabase. Check your connection, that the project is active, and URL Configuration in Supabase. Open the browser console (F12) and try again to see the exact error.';
+            errorMessage = 'Connection error. Please check your internet connection and try again.';
           }
         } else {
           errorMessage = err.message;
         }
       }
+
       return rejectWithValue({ error: errorMessage });
     }
   },

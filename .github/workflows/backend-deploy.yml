@@ -1,0 +1,80 @@
+# Backend: test, build Docker image (linux/amd64), push to ECR, ECS rolling deploy.
+# Trigger: push to main. Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, ECR_URI, ECS_CLUSTER, ECS_SERVICE, ECS_TASK.
+name: Backend Deploy
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: trivia-master
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        working-directory: .
+
+      - name: Build and push Docker image
+        env:
+          ECR_URI: ${{ secrets.ECR_URI }}
+          SHORT_SHA: ${{ steps.tag.outputs.SHORT_SHA }}
+        run: |
+          set -e
+          echo "Building for linux/amd64..."
+          docker buildx create --use --name buildx-builder 2>/dev/null || true
+          docker buildx build --platform linux/amd64 \
+            -f Dockerfile.prod \
+            -t $ECR_URI:$SHORT_SHA \
+            -t $ECR_URI:latest \
+            --provenance=false \
+            --push .
+        working-directory: backend
+
+      - name: Deploy to ECS
+        run: |
+          set -e
+          echo "Forcing ECS rolling deployment..."
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ secrets.AWS_REGION || 'us-east-1' }}

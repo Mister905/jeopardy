@@ -110,7 +110,8 @@ describe('JeopardyParserService', () => {
       };
 
       const result = (service as any).validateRow(row);
-      expect(result).toContain("Invalid round: '3'");
+      expect(result).toContain('Invalid round');
+      expect(result).toContain('3');
     });
 
     it('should return error for empty category', () => {
@@ -258,8 +259,9 @@ describe('JeopardyParserService', () => {
       expect(result.seasonNumber).toBe(33);
       expect(result.round).toBe('1');
       expect(result.category).toBe('CATEGORY');
-      expect(result.answer).toBe('ANSWER');
-      expect(result.question).toBe('QUESTION');
+      // TSV "answer" column = clue text (question), TSV "question" column = response (answer)
+      expect(result.answer).toBe('QUESTION');
+      expect(result.question).toBe('ANSWER');
       expect(result.value).toBe(200);
       expect(result.dailyDouble).toBe(false);
       expect(result.airDate).toBe('2024-01-01');

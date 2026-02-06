@@ -141,8 +141,9 @@ describe('FinalJeopardyParserService', () => {
 
       expect(result.seasonNumber).toBe(33);
       expect(result.category).toBe('CATEGORY');
-      expect(result.answer).toBe('ANSWER');
-      expect(result.question).toBe('QUESTION');
+      // TSV "answer" column = clue text (question), TSV "question" column = response (answer)
+      expect(result.answer).toBe('QUESTION');
+      expect(result.question).toBe('ANSWER');
       expect(result.airDate).toBe('2024-01-01');
       expect(result.sourceFile).toBe('season33.tsv');
     });

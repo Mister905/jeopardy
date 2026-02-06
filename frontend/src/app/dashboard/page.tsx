@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useRequireAuth, signOutAndRedirectToLogin } from '@/lib/auth/hooks';
+import { useRequireAuth } from '@/lib/auth/hooks';
 import { getUserDashboard } from '@/lib/api/user';
 import { ApiClientError } from '@/lib/api/client';
 import type { UserDashboardResponse } from '@/lib/api/types';
@@ -14,7 +13,6 @@ import { StreaksSection } from '@/components/dashboard/StreaksSection';
 import { WagersSection } from '@/components/dashboard/WagersSection';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { user, loading: authLoading } = useRequireAuth();
   const [dashboardData, setDashboardData] = useState<UserDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +58,7 @@ export default function DashboardPage() {
       console.error('Dashboard fetch error:', err);
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
-          await signOutAndRedirectToLogin(router);
+          // Auth hook will handle redirect
           return;
         }
         setError(err.message);
@@ -71,11 +69,6 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
-
-  // Don't show spinner when no user (e.g. after logout); useRequireAuth will redirect
-  if (!user) {
-    return null;
-  }
 
   if (authLoading || loading) {
     return (

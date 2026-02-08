@@ -30,7 +30,7 @@ Browser → CloudFront (HTTPS)
 
 ## AWS Console Overview
 
-**Services used:** S3 (frontend assets), CloudFront (CDN, path-based routing, viewer function), Application Load Balancer (backend entry), ECS Fargate (NestJS container), ECR (Docker images), IAM (roles for ECS, SSM). Optional: Route 53 (custom domain), CloudWatch (logs/alarms). An AWS assistant (e.g. Amazon Q) can help export distribution or resource configs as JSON when debugging with external tools.
+**Services used:** S3 (frontend assets), CloudFront (CDN, path-based routing, viewer function), Application Load Balancer (backend entry), ECS Fargate (NestJS container), ECR (Docker images), IAM (roles for ECS, SSM). Optional: Route 53 (custom domain), ACM (SSL), WAF (web ACL on CloudFront), CloudWatch (logs/alarms). An AWS assistant (e.g. Amazon Q) can help export distribution or resource configs as JSON when debugging with external tools.
 
 **Console vs CLI:** CloudFront distribution (origins, behaviors, viewer function, error pages) and S3 bucket/OAC are best created and edited in the **Console**; CLI often fails for S3+custom-origin setups. Backend **deploys** (ECR push, ECS update-service, task definition) and one-off fixes (e.g. target group health path, security group rules) use **CLI** with a named profile (e.g. `--profile admin`).
 
@@ -43,6 +43,8 @@ Browser → CloudFront (HTTPS)
 ## Backend Deployment
 
 **Profile:** Use `--profile admin` (or your profile) on all `aws` commands below if applicable.
+
+**First-time vs repeat:** Steps below assume **ECS task definition**, **ECS service**, **ALB**, and **target group** already exist. For first-time setup (cluster, task definition, service, ALB), see **Optional: First-time backend setup (CLI)** at the end of this doc. **Repeat deployments** are: build/push image (step 2) and update service (step 4); migrations (step 1) and SSM (step 3) are as needed.
 
 ### Prerequisites
 
@@ -82,6 +84,8 @@ aws ssm put-parameter --name "/trivia-master-backend/DATABASE_URL" \
 
 ### 4. Deploy / update service
 
+*(Repeat deployment.* Assumes ECS task definition and service already exist; for first-time creation see **Optional: First-time backend setup (CLI)**.)
+
 ```bash
 aws ecs update-service \
   --cluster trivia-master-backend-cluster \
@@ -106,13 +110,25 @@ aws elbv2 modify-target-group --target-group-arn "$TG_ARN" --health-check-path /
 
 ---
 
+## Frontend build prerequisites
+
+- **Node.js:** Use Node 20 LTS (or the version required by Next.js 14; see `frontend/package.json` and CI if pinned).
+- **Package manager:** **npm**. Run **`npm install`** (or `npm ci` in CI) before every build.
+- **Environment for build:** Set **`NEXT_PUBLIC_API_URL`**, **`NEXT_PUBLIC_SUPABASE_URL`**, and **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** at build time. Use `frontend/.env` or `frontend/.env.production` for local builds; CI uses GitHub Actions secrets. These values are baked into the static output.
+- **When a frontend rebuild is required:** Any change to **`NEXT_PUBLIC_*`** variables requires a **new build and redeploy** (sync to S3 + CloudFront invalidation). Non-public env vars do not affect the client bundle.
+
+---
+
 ## Frontend Deployment
+
+**First-time vs repeat:** The commands below assume an **S3 bucket** (e.g. `trivia-master-frontend`) and a **CloudFront distribution** already exist and are configured (origins, behaviors, OAC). For first-time setup, create the bucket and distribution in the AWS Console per **CloudFront Routing Summary** and **Custom domain, DNS, and SSL**; then use these steps for **repeat deployments**.
 
 - Build with **production** `NEXT_PUBLIC_*` in `frontend/.env` (Supabase URL/key, and **CloudFront URL** for `NEXT_PUBLIC_API_URL`).
 - Static export writes to `out/`. Sync to S3 and invalidate CloudFront.
 
 ```bash
 cd frontend
+npm install
 npm run build
 aws s3 sync out/ s3://trivia-master-frontend/ --delete --region us-east-1 --profile admin
 aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths '/*' --region us-east-1 --profile admin
@@ -140,16 +156,34 @@ Or use the npm script if defined: `npm run deploy` (must include `--profile admi
 
 ---
 
+## Custom domain, DNS, and SSL (optional)
+
+When using a custom domain (e.g. **triviamaster.dev**):
+
+- **Domain registration:** e.g. NameCheap (or any registrar). Point the domain’s **nameservers** to the Route 53 hosted zone that will manage DNS.
+- **Route 53:** Create a hosted zone for the domain. **Root (apex):** A record, alias target = CloudFront distribution. **www:** CNAME (or alias) to the same CloudFront distribution. Use the hosted zone’s nameservers at the registrar.
+- **SSL (ACM):** Request a certificate in **us-east-1** for the domain and `www.` (e.g. `triviamaster.dev`, `www.triviamaster.dev`). Use **DNS validation** (add the CNAME records ACM provides to the Route 53 hosted zone). Attach the certificate to the CloudFront distribution and set **Viewer protocol policy** to redirect HTTP to HTTPS.
+- **CloudFront:** Add the custom domain(s) as **alternate domain names (CNAMEs)** on the distribution and select the ACM certificate. Distribution ID for this app: **E3PQNFIR6EXJ2L**.
+- **WAF (optional):** Attach a WAF web ACL to the CloudFront distribution for additional protection.
+- **App config:** Set **NEXT_PUBLIC_API_URL** and **FRONTEND_URL** (and Supabase Site URL / Redirect URLs) to the custom domain (e.g. `https://triviamaster.dev` or `https://www.triviamaster.dev`), not the `*.cloudfront.net` URL, so the app and auth use the same origin.
+
+---
+
 ## Environment Variables
 
 | Component | Variable | Purpose |
 |-----------|----------|---------|
 | Backend | `DATABASE_URL` | Supabase Postgres connection string |
 | Backend | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` | Supabase API and JWT verification |
-| Backend | `FRONTEND_URL` | CORS allowed origin (CloudFront URL) |
+| Backend | `FRONTEND_URL` | CORS allowed origin (CloudFront or custom domain URL) |
 | Backend | `PORT` | Listen port (default 3000) |
-| Frontend | `NEXT_PUBLIC_API_URL` | **CloudFront URL** (so API calls go through CloudFront → backend) |
+| Frontend | `NEXT_PUBLIC_API_URL` | **CloudFront or custom domain URL** (e.g. `https://triviamaster.dev`) so API calls go through CloudFront → backend |
 | Frontend | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client (baked at build time) |
+
+**Environment variable behavior — when a new deploy is required:**
+
+- **Frontend rebuild and redeploy required:** Any change to **`NEXT_PUBLIC_*`** (e.g. `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`). These are embedded at build time; update the value, run a new build, then sync to S3 and invalidate CloudFront.
+- **Backend ECS update only:** Changes to **backend** env (SSM: `DATABASE_URL`, `SUPABASE_*`, `FRONTEND_URL`, `PORT`) are read at task startup. Update the parameter in SSM, then run **`aws ecs update-service ... --force-new-deployment`** so new tasks pick up the new values. No image rebuild needed for env-only changes.
 
 ---
 
@@ -165,16 +199,61 @@ Pipelines run on **push to `main`** via GitHub Actions (`.github/workflows/backe
 
 **Backend:** Install deps → run tests → build Docker image (linux/amd64) → push to ECR (deterministic tag + optional `:latest`) → ECS `update-service --force-new-deployment`. If tests or Docker push fail, ECS is not updated. **Rollback:** Re-deploy previous image (update task definition to previous image tag and run `update-service --task-definition <family>:<revision> --force-new-deployment`, or re-run workflow from previous commit). Verify: `curl -i https://<cloudfront-domain>/api/health` → 200 and `{"status":"ok"}`.
 
-**Frontend:** Install deps → build static export (`NEXT_PUBLIC_*` from secrets at build time; changing them requires a rebuild) → sync `out/` to S3 → CloudFront invalidation. If build fails, S3 sync does not run. S3 versioning must be enabled for rollback. **Rollback:** Restore previous S3 object versions for the frontend bucket, then `aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths '/*'`.
+**Frontend:** Install deps → build static export (`NEXT_PUBLIC_*` from secrets at build time; changing them requires a rebuild) → sync `out/` to S3 → CloudFront invalidation. If build fails, S3 sync does not run. S3 versioning must be enabled for rollback. **Rollback:** See **Rollback** section below.
+
+---
+
+## Rollback
+
+**Frontend (S3 + CloudFront):** Restore previous object versions in the frontend S3 bucket, then invalidate CloudFront so edge caches serve the restored content.
+
+```bash
+# 1. List/restore object versions in S3 (Console: S3 → bucket → object → Versions, or use CLI copy from previous version).
+# 2. Invalidate CloudFront so the rollback is visible immediately.
+aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths '/*' --region us-east-1 --profile admin
+```
+
+S3 versioning must be enabled on the bucket for version restore. Prefer restoring the set of objects that corresponded to the last known good deploy.
+
+**Backend (ECS):** Revert the service to a previous task definition revision (and thus previous image tag), then force a new deployment.
+
+```bash
+# List task definition revisions; note the revision you want (e.g. trivia-master-backend-task:42).
+aws ecs list-task-definitions --family-prefix trivia-master-backend-task --region us-east-1 --profile admin
+
+# Update service to that revision and deploy.
+aws ecs update-service \
+  --cluster trivia-master-backend-cluster \
+  --service trivia-master-backend-service \
+  --task-definition trivia-master-backend-task:<REVISION> \
+  --force-new-deployment \
+  --region us-east-1 \
+  --profile admin
+```
+
+Verify: `curl -i https://<cloudfront-domain>/api/health` → 200 and `{"status":"ok"}`.
 
 ---
 
 ## Validation Checklist
 
-- [ ] `curl -I https://<cloudfront-domain>/` → 200 (frontend).
-- [ ] `curl -i https://<cloudfront-domain>/api/health` → 200 and `{"status":"ok"}`.
+- [ ] `curl -I https://<cloudfront-domain-or-custom-domain>/` → 200 (frontend).
+- [ ] `curl -i https://<cloudfront-domain-or-custom-domain>/api/health` → 200 and `{"status":"ok"}`.
 - [ ] Create New Game in the app → lands on game page and game starts or shows Start Game.
-- [ ] Supabase Dashboard: Site URL and Redirect URLs include CloudFront URL.
+- [ ] Supabase Dashboard: Site URL and Redirect URLs include your public URL (CloudFront or custom domain).
+- [ ] If using custom domain: HTTP redirects to HTTPS; root and www both resolve and serve the app.
+
+---
+
+## Post-deploy validation / smoke test
+
+After each deploy, run this short checklist to confirm the release is live and working:
+
+1. **Frontend loads:** Open the app URL in a browser (or `curl -I https://<url>/`). Expect 200 and the app shell (no 5xx or generic error page).
+2. **API health:** `curl -i https://<url>/api/health` → 200 and body `{"status":"ok"}`.
+3. **One core flow:** e.g. sign in (if applicable), open dashboard or game list, or create a new game. Confirm the app reaches the backend and renders without errors.
+
+If any step fails, check **Common Pitfalls** and **Rollback** before rolling back or debugging.
 
 ---
 
@@ -197,7 +276,7 @@ Using Next.js with static export on this stack introduced extra deployment work�
 
 ## Optional: First-time backend setup (CLI)
 
-For creating cluster, ECR repo, task definition, and service from scratch, use `backend/ecs-task-backend.json` as the task definition template. The deploy steps above assume cluster, service, ALB, and target group already exist.
+**First-time deploy only.** For creating **ECS cluster**, **ECR repo**, **task definition**, and **ECS service** from scratch, use `backend/ecs-task-backend.json` as the task definition template. The **Backend Deployment** steps above assume cluster, service, **ALB**, and **target group** already exist. Create the ALB and target group in the Console or CLI if needed; then register the service with the target group. **S3 bucket** and **CloudFront distribution** are separate first-time setup: create the bucket and distribution in the Console per **CloudFront Routing Summary** and **Custom domain, DNS, and SSL**; there is no single CLI template for the full frontend stack.
 
 ---
 

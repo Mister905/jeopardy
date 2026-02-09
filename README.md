@@ -8,7 +8,7 @@ A full-stack, single-player Jeopardy-style trivia web application. Users sign in
 - **Gameplay:** Create a game, start it to load the board, then select clues in any order. Each clue shows a question and dollar value. You reveal the answer and mark whether you were correct or wrong; the backend updates your score. Daily Doubles (one in the first round, two in the second) support wagering within defined bounds. If your score is positive after Double Jeopardy, you play Final Jeopardy: one clue, one wager (zero up to your full score), then correct/incorrect. The game ends when all clues are resolved or when you are ineligible for Final Jeopardy.
 - **History and stats:** Completed games are listed; user profile and aggregate stats (games played, accuracy, best/worst score, streaks, etc.) are available from the API and shown in the UI where implemented.
 
-Clue data is not fetched from an external API at runtime. Raw clue data is ingested from TSV files (in `backend/data/jeopardy_clue_dataset/raw`) into the database via npm scripts. You must run ingestion before games can be created.
+Clue data is not fetched from an external API at runtime. Raw clue data is ingested from TSV files (in `backend/data/jeopardy_clue_dataset/raw`) into the database via npm scripts. That data comes from the [jeopardy_clue_dataset](https://github.com/jwolle1/jeopardy_clue_dataset) repository (Jeopardy! clues 1984–2025). You must run ingestion before games can be created.
 
 ## Why this project exists
 
@@ -95,6 +95,10 @@ Supabase provides both the database (hosted Postgres) and authentication. There 
    Open http://localhost:3000. Ensure `NEXT_PUBLIC_API_URL` points to the backend (e.g. http://localhost:3001).
 
 Further backend details (scripts, tests, env vars) are in `backend/README.md`. Frontend setup and scripts are in `frontend/README.md`. Deployment and CI/CD are documented in `docs/deploy.md` and `docs/preflight_cicd.md`.
+
+## Acknowledgments
+
+Raw clue data is sourced from [jwolle1/jeopardy_clue_dataset](https://github.com/jwolle1/jeopardy_clue_dataset) (Jeopardy! clues 1984–2025). It was instrumental to this project.
 
 ## License
 

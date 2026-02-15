@@ -74,11 +74,24 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/trivia-master-backend:l
 
 ### 3. Secrets (SSM)
 
+Create parameters in Parameter Store. **FRONTEND_URL is required for CORS** (CloudFront or custom domain URL).
+
 ```bash
 aws ssm put-parameter --name "/trivia-master-backend/DATABASE_URL" \
   --type SecureString --value "<connection-string>" --region us-east-1 --profile admin
-# Repeat for SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET, FRONTEND_URL.
+aws ssm put-parameter --name "/trivia-master-backend/SUPABASE_URL" \
+  --type SecureString --value "<supabase-url>" --region us-east-1 --profile admin
+aws ssm put-parameter --name "/trivia-master-backend/SUPABASE_ANON_KEY" \
+  --type SecureString --value "<anon-key>" --region us-east-1 --profile admin
+aws ssm put-parameter --name "/trivia-master-backend/SUPABASE_JWT_SECRET" \
+  --type SecureString --value "<jwt-secret>" --region us-east-1 --profile admin
+aws ssm put-parameter --name "/trivia-master-backend/FRONTEND_URL" \
+  --type String --value "https://<cloudfront-domain>.cloudfront.net,https://triviamaster.dev,https://www.triviamaster.dev" --region us-east-1 --profile admin
 ```
+
+**FRONTEND_URL:** Comma-separated list of allowed origins. Include CloudFront URL and custom domains (e.g. `https://triviamaster.dev`, `https://www.triviamaster.dev`). Apex and subdomains are allowed automatically (e.g. `triviamaster.dev` allows `www.triviamaster.dev`). The ECS task definition must reference this parameter in its `secrets` section—see `backend/ecs-task-backend.json`.
+
+**If your task definition is missing FRONTEND_URL:** Add this to the container's `secrets` array in the task definition (via Console or `aws ecs register-task-definition`): `{"name": "FRONTEND_URL", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/FRONTEND_URL"}`. Then run `update-service --force-new-deployment`.
 
 **Execution role:** Must allow reading these parameters. Attach an inline policy to the ECS task **execution** role (e.g. `trivia-master-backend-execution-role`) with `ssm:GetParameters` on `arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/trivia-master-backend/*` and, if using KMS, `kms:Decrypt` on the key used by the parameters. After changing parameters or adding this policy, run `update-service --force-new-deployment` so new tasks pick up secrets.
 
@@ -144,7 +157,7 @@ Or use the npm script if defined: `npm run deploy` (must include `--profile admi
 
 | Path pattern | Origin | Cache | Notes |
 |--------------|--------|-------|-------|
-| **/api*** | ALB (backend) | Disabled | Origin request policy: **Managed-AllViewerExceptHostHeader** (forwards `Authorization`). |
+| **/api*** | ALB (backend) | Disabled | Origin request policy: **Managed-AllViewerExceptHostHeader** (forwards `Origin`, `Authorization`, etc.). **Required for CORS.** |
 | **/games/*** | S3 (frontend) | Disabled | Path pattern must include leading slash: `/games/*`. Viewer request: CloudFront Function (see below). |
 | **Default (*)** | S3 (frontend) | Optimized | DefaultRootObject `index.html`. Viewer request: same function for `.html` rewrites. |
 
@@ -276,7 +289,7 @@ Using Next.js with static export on this stack introduced extra deployment work�
 
 ## Optional: First-time backend setup (CLI)
 
-**First-time deploy only.** For creating **ECS cluster**, **ECR repo**, **task definition**, and **ECS service** from scratch, use `backend/ecs-task-backend.json` as the task definition template. The **Backend Deployment** steps above assume cluster, service, **ALB**, and **target group** already exist. Create the ALB and target group in the Console or CLI if needed; then register the service with the target group. **S3 bucket** and **CloudFront distribution** are separate first-time setup: create the bucket and distribution in the Console per **CloudFront Routing Summary** and **Custom domain, DNS, and SSL**; there is no single CLI template for the full frontend stack.
+**First-time deploy only.** For creating **ECS cluster**, **ECR repo**, **task definition**, and **ECS service** from scratch, use `backend/ecs-task-backend.json` as the task definition template. Replace `<ACCOUNT_ID>` with your AWS account ID. The template includes `FRONTEND_URL` in `secrets` for CORS—ensure the parameter exists in SSM (step 3 above). The **Backend Deployment** steps above assume cluster, service, **ALB**, and **target group** already exist. Create the ALB and target group in the Console or CLI if needed; then register the service with the target group. **S3 bucket** and **CloudFront distribution** are separate first-time setup: create the bucket and distribution in the Console per **CloudFront Routing Summary** and **Custom domain, DNS, and SSL**; there is no single CLI template for the full frontend stack.
 
 ---
 
@@ -324,6 +337,45 @@ These activities validate that logs, metrics, health checks, and failure modes a
 
 - **Purpose:** Distinguish edge (CloudFront) from origin (ALB/backend) when users see 5xx or slowness.
 - **CloudFront (edge):** CloudWatch → Metrics → All metrics → **CloudFront** → By distribution. Select your **distribution ID** (e.g. from `aws cloudfront list-distributions`). Add **Requests**, **5xxErrorRate**. CloudFront metrics exist only in **us-east-1**. Optional: add a dashboard (e.g. Trivia-Master-Ops) with a widget; use the correct DistributionId or the graph shows no data.
+
+---
+
+## 503 Service Temporarily Unavailable
+
+A **503** usually means the ALB has no healthy targets (backend not reachable). Check in order:
+
+1. **ALB target health**  
+   EC2 → Target groups → backend target group → Targets tab. If all targets are **Unhealthy** or **Initial**, the ALB returns 503.
+
+2. **Health check path**  
+   Target group → Details → Health check path must be **`/api/health`** (backend uses global prefix `api`). Wrong path (e.g. `/health`) → targets never become healthy.
+
+3. **ECS tasks running?**  
+   ECS → Clusters → your cluster → Services → backend service. Check **Running tasks count**. If 0, tasks may be failing to start (check Events and stopped tasks).
+
+4. **Security groups**  
+   ECS task security group must allow **inbound TCP 3000** from the ALB security group. ALB must allow inbound from CloudFront (or your source).
+
+5. **Backend logs**  
+   `aws logs tail /ecs/trivia-master-backend --follow --region us-east-1` — look for startup errors, DB connection failures, or crashes.
+
+6. **CloudFront origin**  
+   If `/api*` routes to the wrong origin or the ALB is misconfigured, CloudFront may return 503 when the origin fails.
+
+---
+
+## CORS troubleshooting ("CORS request did not succeed", status null)
+
+**"CORS request did not succeed"** with **status code (null)** usually means the request failed before a response was received. Check in order:
+
+1. **Backend reachable?**  
+   `curl -i https://<cloudfront-domain>/api/health` → must return `200` and `{"status":"ok"}`. If this fails, the issue is infrastructure (ECS down, ALB, CloudFront origin), not CORS.
+
+2. **`FRONTEND_URL` set on backend?**  
+   Backend ECS must have `FRONTEND_URL` set to your CloudFront URL (e.g. `https://dusbh2m7p52nb.cloudfront.net`) or custom domain. Supports comma-separated values for multiple origins. Without this, only localhost is allowed and production requests are blocked.
+
+3. **CloudFront origin request policy**  
+   The `/api*` behavior must use **Managed-AllViewerExceptHostHeader** (or equivalent) so the `Origin` header is forwarded to the backend. Policies like `CORS-SimpleHeaders` do **not** forward `Origin` and will cause CORS failures.
 - **ALB (origin):** Metrics → **Application ELB** → By Load Balancer → select your ALB. Add **RequestCount**, **HTTPCode_ELB_5XX_Count**, **HTTPCode_Target_5XX_Count**, **TargetResponseTime**.
 - **Interpretation:** High CloudFront 5xxErrorRate + high origin latency → origin problem. High **HTTPCode_ELB_5XX_Count** → no healthy targets or timeouts. High **HTTPCode_Target_5XX_Count** → backend returning 5xx; check ECS/CloudWatch logs.
 

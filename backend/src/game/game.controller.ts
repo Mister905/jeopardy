@@ -108,12 +108,8 @@ export class GameController {
 
   /**
    * POST /games
-   * Create a new game for the authenticated user
-   *
-   * GAME LIFECYCLE NOTE (Phase 1 – PENDING):
-   * Responsible for: Creating Game + FinalJeopardy clue only. State = PENDING.
-   * NOT responsible for: Board generation (60 clues, Daily Doubles). That is startGame().
-   * Why separate: Board build is heavy; create stays fast so we can redirect immediately.
+   * Create and start a new game for the authenticated user.
+   * Creates Game + FinalJeopardy, builds full board (60 clues, Daily Doubles), and returns ACTIVE game.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -129,21 +125,9 @@ export class GameController {
         user.email, // Optional - service will handle if missing
         dto.username,
       );
-      // CreateGameResult.game has finalJeopardy with clue, but no gameClues
-      // Map it to match GameWithRelations structure
-      const gameData = {
-        ...result.game,
-        gameClues: undefined,
-        finalJeopardy: result.game.finalJeopardy
-          ? {
-              ...result.game.finalJeopardy,
-              clue: result.game.finalJeopardy.clue,
-            }
-          : null,
-      } as GameWithRelations;
-      return this.mapGameToResponseDto(gameData);
+      return this.mapGameToResponseDto(result.game as GameWithRelations);
     } catch (error) {
-      this.logger.error(`Failed to create game: ${error.message}`);
+      this.logger.error(`Failed to create game: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

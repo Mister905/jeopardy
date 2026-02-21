@@ -383,6 +383,8 @@ COMPLETED
 
 The DTO is a schema and validator for the request payload, ensuring only well-formed, expected data reaches the service layer.
 
+DTO (Data Transfer Object): A backend “interface with rules” that defines the shape of data sent to or from an API. In NestJS, DTOs are typically classes that specify types and validation for incoming requests, ensuring the backend only processes well-formed data. They act as a contract between the client and the service layer, similar to TypeScript interfaces but with runtime enforcement.
+
 **Location:** `backend/src/game/dto/` — `create-game.dto.ts`, `answer-clue.dto.ts`, `submit-wager.dto.ts`, etc.
 
 **Validation pipe:** `backend/src/main.ts` (lines 91–96): `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })`. Strips unknown properties, rejects extra fields, coerces types.

@@ -184,11 +184,20 @@ describe('GameService', () => {
         },
       );
 
+      // createGame now calls startGame + getGameById - mock them
+      const startedGameWithRelations = {
+        ...mockGameWithRelations,
+        state: GameState.ACTIVE,
+        gameClues: [],
+      };
+      jest.spyOn(service, 'startGame').mockResolvedValue(mockGame as any);
+      jest.spyOn(service, 'getGameById').mockResolvedValue(startedGameWithRelations as any);
+
       const result = await service.createGame(mockUserId);
 
       expect(result.game.id).toBe(mockGame.id);
       expect(result.game.userId).toBe(mockUserId);
-      expect(result.game.state).toBe(GameState.PENDING);
+      expect(result.game.state).toBe(GameState.ACTIVE);
       expect(result.game.score).toBe(0);
       expect(result.game.finalJeopardy.clueId).toBe(mockClue.id);
       expect(result.game.finalJeopardy.wager).toBe(0);
@@ -237,6 +246,14 @@ describe('GameService', () => {
           return callback(mockTransactionPrisma);
         },
       );
+
+      const startedGameWithRelations = {
+        ...mockGameWithRelations,
+        state: GameState.ACTIVE,
+        gameClues: [],
+      };
+      jest.spyOn(service, 'startGame').mockResolvedValue(mockGame as any);
+      jest.spyOn(service, 'getGameById').mockResolvedValue(startedGameWithRelations as any);
 
       await service.createGame(mockUserId);
 
@@ -306,6 +323,15 @@ describe('GameService', () => {
           return callback(mockTransactionPrisma);
         },
       );
+
+      const startedGameWithRelations = {
+        ...mockGameWithRelations,
+        finalJeopardy: { ...mockFinalJeopardy, clue: clues[0] },
+        state: GameState.ACTIVE,
+        gameClues: [],
+      };
+      jest.spyOn(service, 'startGame').mockResolvedValue(mockGame as any);
+      jest.spyOn(service, 'getGameById').mockResolvedValue(startedGameWithRelations as any);
 
       await service.createGame(mockUserId);
 

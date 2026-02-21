@@ -93,10 +93,11 @@ describe('Games API (integration)', () => {
         .expect(201)
         .expect((res) => {
           expect(res.body).toHaveProperty('id');
-          expect(res.body).toHaveProperty('state', GameState.PENDING);
+          expect(res.body).toHaveProperty('state', GameState.ACTIVE);
           expect(res.body).toHaveProperty('score', 0);
           expect(res.body).toHaveProperty('finalJeopardy');
           expect(res.body.finalJeopardy).toHaveProperty('clue');
+          expect(res.body).toHaveProperty('gameClues');
         });
     });
 
@@ -154,6 +155,19 @@ function createMockPrisma(
     dailyDouble: false,
     createdAt: new Date(),
   };
+  const jeopardyValues = [200, 400, 600, 800, 1000];
+  const doubleJeopardyValues = [400, 800, 1200, 1600, 2000];
+  const categories = ['CatA', 'CatB', 'CatC', 'CatD', 'CatE', 'CatF'];
+  const createClue = (round: Round, category: string, value: number) => ({
+    id: `clue-${round}-${category}-${value}`,
+    category,
+    round,
+    value,
+    question: 'Q?',
+    answer: 'A',
+    dailyDouble: false,
+    createdAt: new Date(),
+  });
   const game = {
     id: gameId,
     userId,
@@ -162,6 +176,7 @@ function createMockPrisma(
     createdAt: new Date(),
     updatedAt: new Date(),
   };
+  const activeGame = { ...game, state: GameState.ACTIVE };
   const finalJeopardy = {
     id: 'fj-1',
     gameId,
@@ -172,9 +187,40 @@ function createMockPrisma(
     answeredAt: null,
     clue: finalClue,
   };
+  const gameClueStub = {
+    id: 'gc-1',
+    gameId,
+    clueId,
+    state: 'UNANSWERED',
+    wager: null,
+    scoreDelta: null,
+    answeredAt: null,
+    isDailyDouble: false,
+    clue: createClue(Round.JEOPARDY, 'CatA', 200),
+  };
   const gameWithRelations = {
     ...game,
     gameClues: [],
+    finalJeopardy,
+  };
+  const gameCluesList = Array.from({ length: 60 }, (_, i) => {
+    const isJeopardy = i < 30;
+    const round = isJeopardy ? Round.JEOPARDY : Round.DOUBLE_JEOPARDY;
+    const catIdx = i % 6;
+    const valIdx = i % 5;
+    const value = isJeopardy ? jeopardyValues[valIdx] : doubleJeopardyValues[valIdx];
+    const isDD =
+      (isJeopardy && i === 15) || (!isJeopardy && (i === 31 || i === 37));
+    return {
+      ...gameClueStub,
+      id: `gc-${i}`,
+      isDailyDouble: isDD,
+      clue: createClue(round, categories[catIdx], value),
+    };
+  });
+  const activeGameWithRelations = {
+    ...activeGame,
+    gameClues: gameCluesList,
     finalJeopardy,
   };
 
@@ -194,19 +240,54 @@ function createMockPrisma(
       update: jest.fn().mockResolvedValue({ id: userId, email, username: 'IntegrationUser' }),
     },
     clue: {
-      findMany: jest.fn().mockResolvedValue([finalClue]),
+      findMany: jest.fn().mockImplementation((args: any) => {
+        const where = args?.where || {};
+        const distinct = args?.distinct;
+        if (where.round === Round.FINAL) {
+          return Promise.resolve([finalClue]);
+        }
+        if (distinct?.includes('category') && where.round) {
+          return Promise.resolve(categories.map((c) => ({ category: c })));
+        }
+        if (where.round && where.category != null && where.value != null) {
+          const clue = createClue(where.round, where.category, where.value);
+          return Promise.resolve([clue]);
+        }
+        return Promise.resolve([]);
+      }),
     },
     game: {
       create: jest.fn().mockResolvedValue(game),
+      findFirst: jest.fn().mockResolvedValue(null),
       findUnique: jest.fn().mockImplementation((args: any) => {
         if (args?.where?.id === gameId) {
-          return Promise.resolve({ ...gameWithRelations, ...args?.include ? { gameClues: [], finalJeopardy } : {} });
+          const include = args?.include;
+          const base = include?.gameClues ? activeGame : game;
+          const result: any = { ...base };
+          if (include?.gameClues) result.gameClues = activeGameWithRelations.gameClues;
+          if (include?.finalJeopardy) result.finalJeopardy = { ...finalJeopardy, clue: finalClue };
+          return Promise.resolve(result);
         }
         return Promise.resolve(null);
       }),
       findMany: jest.fn().mockResolvedValue([game]),
       count: jest.fn().mockResolvedValue(1),
-      update: jest.fn().mockResolvedValue(game),
+      update: jest.fn().mockResolvedValue(activeGame),
+    },
+    gameClue: {
+      create: jest.fn().mockImplementation((args: any) =>
+        Promise.resolve({
+          id: `gc-${Math.random().toString(36).slice(2)}`,
+          gameId: args?.data?.gameId,
+          clueId: args?.data?.clueId,
+          state: 'UNANSWERED',
+          wager: null,
+          scoreDelta: null,
+          answeredAt: null,
+          isDailyDouble: args?.data?.isDailyDouble ?? false,
+        }),
+      ),
+      findMany: jest.fn().mockResolvedValue(activeGameWithRelations.gameClues),
     },
     finalJeopardy: {
       create: jest.fn().mockResolvedValue(finalJeopardy),
@@ -219,11 +300,20 @@ function createMockPrisma(
     }),
   };
 
+  let getGameWithCluesCallCount = 0;
   (client.game.findUnique as jest.Mock).mockImplementation((args: any) => {
     if (args?.where?.id === gameId) {
       const include = args?.include;
-      const result: any = { ...game };
-      if (include?.gameClues) result.gameClues = [];
+      const hasGameCluesInclude = include?.gameClues;
+      if (hasGameCluesInclude) getGameWithCluesCallCount += 1;
+      const isAfterStartGame = hasGameCluesInclude && getGameWithCluesCallCount > 1;
+      const base = hasGameCluesInclude && isAfterStartGame ? activeGame : game;
+      const result: any = { ...base };
+      if (include?.gameClues) {
+        result.gameClues = isAfterStartGame
+          ? activeGameWithRelations.gameClues
+          : [];
+      }
       if (include?.finalJeopardy) result.finalJeopardy = { ...finalJeopardy, clue: finalClue };
       return Promise.resolve(result);
     }
@@ -237,9 +327,13 @@ function createMockPrisma(
     const txClient = {
       ...client,
       game: {
+        ...client.game,
         create: jest.fn().mockResolvedValue(game),
         findUnique: jest.fn().mockResolvedValue(gameWithRelations),
+        update: jest.fn().mockResolvedValue(activeGame),
       },
+      gameClue: client.gameClue,
+      clue: client.clue,
       finalJeopardy: {
         create: jest.fn().mockResolvedValue(finalJeopardy),
       },

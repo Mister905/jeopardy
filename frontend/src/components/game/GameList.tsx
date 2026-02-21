@@ -65,7 +65,7 @@ export function GameList({
           className="game-list__create-btn inline-flex items-center justify-center gap-2 px-6 py-2 text-white rounded-lg disabled:opacity-50 border-2 transition-colors"
         >
           <Plus className="h-5 w-5 shrink-0" aria-hidden />
-          {creatingGame ? 'Creating...' : 'Create New Game'}
+          Create New Game
         </button>
       </div>
     );

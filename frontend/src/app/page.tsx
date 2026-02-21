@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth, signOutAndRedirectToLogin } from '@/lib/auth/hooks';
 import { GameList } from '@/components/game/GameList';
-import { createGame, listGames, endGame } from '@/lib/api/games';
+import { listGames, endGame } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListGamesResponse } from '@/lib/api/types';
 
@@ -14,7 +14,6 @@ export default function HomePage() {
   const [gamesData, setGamesData] = useState<ListGamesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creatingGame, setCreatingGame] = useState(false);
   const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export default function HomePage() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.statusCode === 401) {
-          await signOutAndRedirectToLogin(router);
+          await signOutAndRedirectToLogin(router, 'unauthorized');
           return;
         }
         setError(err.message);
@@ -45,34 +44,9 @@ export default function HomePage() {
     }
   };
 
-  const handleCreateGame = async () => {
-    setError(null);
-    setAuthError(false);
-    setCreatingGame(true);
-    try {
-      const username = localStorage.getItem('pendingUsername') || undefined;
-      const newGame = await createGame(username);
-      if (username) {
-        localStorage.removeItem('pendingUsername');
-      }
-      window.location.href = `/games/${newGame.id}?autoStart=true`;
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        console.warn('[Trivia] Create game failed:', err.statusCode, err.message);
-        if (err.statusCode === 401) {
-          setAuthError(true);
-          setError(
-            'Authorization failed. The app may not be sending your sign-in token to the server. Try signing in again, or check that the deployment forwards the Authorization header for /api requests.'
-          );
-          return;
-        }
-        setError(err.message);
-      } else {
-        setError('Failed to create game. Please try again.');
-      }
-    } finally {
-      setCreatingGame(false);
-    }
+  const handleCreateGame = () => {
+    // Navigate immediately to /games/new - that page shows "Preparing your game board" and creates the game
+    router.push('/games/new');
   };
 
   const handleEndGame = async (gameId: string) => {
@@ -105,7 +79,7 @@ export default function HomePage() {
         loading={loading}
         error={error}
         onCreateGame={handleCreateGame}
-        creatingGame={creatingGame}
+        creatingGame={false}
         onEndGame={handleEndGame}
         errorActionLabel={authError ? 'Sign in again' : undefined}
         onErrorAction={

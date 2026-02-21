@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { supabase } from './supabase';
 import type { AuthenticatedUser } from '@/types/auth';
 import type { Session } from '@supabase/supabase-js';
@@ -48,24 +48,43 @@ export function useAuth() {
 
 export function useRequireAuth() {
   const { user, loading } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading && !user) {
-      // Only redirect if not already on login page to prevent loops
-      if (pathname !== '/auth/login') {
-        router.push('/auth/login');
-      }
+    if (!loading && !user && pathname !== '/auth/login') {
+      // Use replace to force full page load and avoid client-side routing loops
+      window.location.replace('/auth/login');
     }
-  }, [user, loading, router, pathname]);
+  }, [user, loading, pathname]);
 
   return { user, loading };
 }
 
-export async function signOutAndRedirectToLogin(router: { push: (path: string) => void }): Promise<void> {
-  await supabase.auth.signOut();
-  router.push('/auth/login');
+/** Clear Supabase auth from localStorage (fallback when signOut fails) */
+function clearSupabaseAuthStorage(): void {
+  if (typeof window === 'undefined') return;
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key?.startsWith('sb-') && key.includes('-auth-token')) {
+      keys.push(key);
+    }
+  }
+  keys.forEach((k) => window.localStorage.removeItem(k));
+}
+
+export async function signOutAndRedirectToLogin(
+  router: { push: (path: string) => void },
+  reason?: 'expired' | 'unauthorized',
+): Promise<void> {
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+  }
+  clearSupabaseAuthStorage();
+  const query = reason ? `?reason=${reason}` : '';
+  window.location.href = `/auth/login${query}`;
 }
 
 // getAccessToken moved to api/client.ts to avoid circular dependencies

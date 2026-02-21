@@ -163,6 +163,8 @@ export const signOutUser = createAsyncThunk(
       const { error } = await supabase.auth.signOut();
 
       if (error) {
+        // If server signOut fails (e.g. 403 from paused project), clear local session anyway
+        await supabase.auth.signOut({ scope: 'local' });
         return rejectWithValue({
           error: error.message || 'Failed to sign out. Please try again.',
         });
@@ -170,6 +172,8 @@ export const signOutUser = createAsyncThunk(
 
       return { success: true };
     } catch (err) {
+      // Clear local session even if signOut throws (e.g. network/403)
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
       return rejectWithValue({
         error: err instanceof Error ? err.message : 'Failed to sign out. Please try again.',
       });

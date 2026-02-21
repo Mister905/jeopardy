@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { GameInProgressException } from './exceptions/game-in-progress.exception';
+import { GameStateException } from './exceptions/game-state.exception';
 import { PassValidationException } from './exceptions/pass-validation.exception';
 import {
   GameState,
@@ -165,7 +166,16 @@ export class GameService {
     );
 
     this.logger.log(`Game creation complete: ${result.game.id}`);
-    return result;
+
+    // Immediately start the game (build board, assign Daily Doubles) - no separate step
+    await this.startGame(result.game.id, userId);
+
+    const gameWithRelations = await this.getGameById(result.game.id, userId);
+    if (!gameWithRelations || !gameWithRelations.finalJeopardy) {
+      throw new Error('Failed to fetch started game');
+    }
+
+    return { game: gameWithRelations } as CreateGameResult;
   }
 
   /**
@@ -1387,7 +1397,7 @@ export class GameService {
       game.state === GameState.COMPLETED ||
       game.state === GameState.ELIMINATED
     ) {
-      throw new Error(`Game is already ${game.state}`);
+      throw new GameStateException(game.state);
     }
 
     // Transition to ELIMINATED state (abandoned game)

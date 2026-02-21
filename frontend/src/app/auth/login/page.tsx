@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, Suspense } from 'react';
 import '@/styles/components/LoginPage.scss';
 import Image from 'next/image';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAuth } from '@/lib/auth/hooks';
 import {
@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -30,7 +30,9 @@ export default function LoginPage() {
 
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
+  const redirectReason = searchParams?.get('reason');
   const { user } = useAuth();
 
   const signInLoading = useAppSelector((state) => state.auth.signInLoading);
@@ -40,13 +42,13 @@ export default function LoginPage() {
   const signUpSuccess = useAppSelector((state) => state.auth.signUpSuccess);
   const signUpMessage = useAppSelector((state) => state.auth.signUpMessage);
 
-  // Redirect if user is already logged in
+  // Redirect if user is already logged in (skip when reason=unauthorized to prevent loop)
   useEffect(() => {
+    if (redirectReason === 'unauthorized') return;
     if (user && pathname === '/auth/login') {
-      // Only redirect if currently on login page to prevent loops
       router.push('/');
     }
-  }, [user, router, pathname]);
+  }, [user, pathname, router, redirectReason]);
 
   const loading = mode === 'signIn' ? signInLoading : signUpLoading;
   const error = mode === 'signIn' ? signInError : signUpError;
@@ -151,6 +153,17 @@ export default function LoginPage() {
         <p className="text-white opacity-80 text-center mb-6">
           {mode === 'signIn' ? 'Sign in to start playing' : 'Create an account to start playing'}
         </p>
+
+        {redirectReason === 'unauthorized' && (
+          <div className="mb-4 px-4 py-3 rounded border-2 border-amber-500/50 bg-amber-500/10 text-amber-200">
+            <p className="text-sm">
+              Your session expired. Please sign in again.
+              {process.env.NODE_ENV !== 'production' && (
+                <> If this keeps happening, ensure the backend <code className="text-xs">SUPABASE_JWT_SECRET</code> matches your Supabase project.</>
+              )}
+            </p>
+          </div>
+        )}
 
         {(error || validationError) && (
           <div className="mb-4">
@@ -286,5 +299,19 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center items-center min-h-[40vh]">
+          <LoadingSpinner size="lg" />
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

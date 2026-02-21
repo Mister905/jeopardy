@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Image from 'next/image';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useRequireAuth } from '@/lib/auth/hooks';
+import { useRequireAuth, signOutAndRedirectToLogin } from '@/lib/auth/hooks';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   fetchGameData,
@@ -31,6 +31,7 @@ import {
   DialogContent,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ApiClientError } from '@/lib/api/client';
 import { createGame } from '@/lib/api/games';
 import { getUserDashboard } from '@/lib/api/user';
 import type { JeopardyBoard } from '@/lib/api/types';
@@ -47,10 +48,12 @@ export function GameDetailPageClient() {
   const gameId = (idFromPath ?? params?.id) as string;
   const dispatch = useAppDispatch();
   const autoStartAttempted = useRef(false);
+  const createAttempted = useRef(false);
 
   // Track Daily Double flow step: 'intro' | 'wager' | 'question'
   const [dailyDoubleStep, setDailyDoubleStep] = useState<'intro' | 'wager' | 'question'>('intro');
   const [username, setUsername] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Get all state from Redux
   const game = useAppSelector((state) => state.game.game);
@@ -73,9 +76,33 @@ export function GameDetailPageClient() {
     }
   }, [gameId, currentGameId, game, dispatch]);
 
-  // Initialize game data on mount
+  // Create new game when on /games/new
   useEffect(() => {
-    if (!authLoading && user && gameId) {
+    if (gameId !== 'new' || authLoading || !user || createAttempted.current)
+      return;
+    createAttempted.current = true;
+    setCreateError(null);
+    const username = localStorage.getItem('pendingUsername') || undefined;
+    createGame(username)
+      .then((newGame) => {
+        if (username) localStorage.removeItem('pendingUsername');
+        window.location.href = `/games/${newGame.id}`;
+      })
+      .catch(async (err) => {
+        createAttempted.current = false;
+        if (err instanceof ApiClientError && err.statusCode === 401) {
+          await signOutAndRedirectToLogin(router, 'unauthorized');
+          return;
+        }
+        const message =
+          err?.message || 'Failed to create game. Please try again.';
+        setCreateError(message);
+      });
+  }, [gameId, authLoading, user]);
+
+  // Initialize game data on mount (skip when creating new game)
+  useEffect(() => {
+    if (!authLoading && user && gameId && gameId !== 'new') {
       if (!game || game.id !== gameId) {
         dispatch(fetchGameData(gameId));
       }
@@ -166,6 +193,30 @@ export function GameDetailPageClient() {
 
   const isGameIdMismatch = game && game.id !== gameId;
   const shouldShowLoading = authLoading || loading || isGameIdMismatch;
+
+  // /games/new: show "Preparing your game board" while creating, or error if create failed
+  if (gameId === 'new') {
+    if (createError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <ErrorDisplay error={createError} />
+          <Button
+            onClick={() => router.push('/')}
+            className="mt-4"
+            variant="secondary"
+          >
+            Back to Games
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 text-white text-lg">Preparing your game board...</p>
+      </div>
+    );
+  }
 
   if (shouldShowLoading) {
     return (

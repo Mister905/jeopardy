@@ -1,6 +1,6 @@
 import { supabase } from '../auth/supabase';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 export interface ApiError {
   statusCode: number;
@@ -19,10 +19,33 @@ export class ApiClientError extends Error {
   }
 }
 
+/** Check if JWT is expired (with 60s buffer) */
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const exp = payload.exp as number | undefined;
+    if (!exp) return true;
+    return Date.now() / 1000 >= exp - 60; // 60s buffer
+  } catch {
+    return true;
+  }
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const {
+  let {
     data: { session },
   } = await supabase.auth.getSession();
+
+  // Refresh session if token is expired (backend will reject expired tokens with 401)
+  if (session?.access_token && isTokenExpired(session.access_token)) {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (!error && data.session) session = data.session;
+    } catch {
+      // Keep existing session; backend may still reject if expired
+    }
+  }
+
   const token = session?.access_token ?? null;
 
   const headers: HeadersInit = {
@@ -126,7 +149,7 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
 
     // Handle network errors (backend not running, CORS, etc.)
     if (err instanceof TypeError) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
       
       // TypeError with "Failed to fetch" usually means:
       // 1. Backend not running (connection refused)
@@ -179,7 +202,7 @@ export async function apiPost<T>(
 
     // Handle network errors (backend not running, CORS, etc.)
     if (err instanceof TypeError) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
       
       // TypeError with "Failed to fetch" usually means:
       // 1. Backend not running (connection refused)

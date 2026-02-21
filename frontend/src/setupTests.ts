@@ -28,5 +28,3 @@ jest.mock('@/lib/auth/supabase', () => ({
   },
 }));
 
-// Setup fake timers for polling tests
-// Tests that need real timers should call jest.useRealTimers() explicitly

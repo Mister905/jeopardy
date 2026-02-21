@@ -109,6 +109,11 @@ export class GameController {
   /**
    * POST /games
    * Create a new game for the authenticated user
+   *
+   * GAME LIFECYCLE NOTE (Phase 1 – PENDING):
+   * Responsible for: Creating Game + FinalJeopardy clue only. State = PENDING.
+   * NOT responsible for: Board generation (60 clues, Daily Doubles). That is startGame().
+   * Why separate: Board build is heavy; create stays fast so we can redirect immediately.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -198,6 +203,11 @@ export class GameController {
   /**
    * POST /games/:id/start
    * Start a game by creating Jeopardy and Double Jeopardy boards
+   *
+   * GAME LIFECYCLE NOTE (Phase 2 – ACTIVE):
+   * Responsible for: Building full board (60 GameClues), assigning Daily Doubles, PENDING → ACTIVE.
+   * NOT responsible for: Creating the Game or FinalJeopardy clue. That is createGame().
+   * Why separate: Heavy work; user may abandon before starting. Create is lightweight.
    */
   @Post(':id/start')
   async startGame(
@@ -251,6 +261,11 @@ export class GameController {
   /**
    * POST /games/:id/clues/:clueId/answer
    * Answer a regular clue or submit Daily Double answer
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Responsible for: Score mutation, GameClue RESOLVED, optional ACTIVE → FINAL_PENDING/ELIMINATED.
+   * NOT responsible for: Clue selection (frontend-only). Backend is authoritative for score.
+   * Why transaction: GameClue + Game.score must update atomically; round completion checked here.
    */
   @Post(':id/clues/:clueId/answer')
   async answerClue(
@@ -302,6 +317,9 @@ export class GameController {
   /**
    * POST /games/:id/clues/:clueId/pass
    * Pass on a regular (non–Daily Double) clue; no score change. Not allowed for Daily Doubles.
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Same lifecycle as answerClue (RESOLVED, round completion) but scoreDelta = 0. No stats update.
    */
   @Post(':id/clues/:clueId/pass')
   @HttpCode(HttpStatus.OK)
@@ -352,6 +370,9 @@ export class GameController {
   /**
    * POST /games/:id/clues/:clueId/wager
    * Submit a wager for a Daily Double clue
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Daily Double only. GameClue UNANSWERED → ANSWERED. Must call before answerClue for DD.
    */
   @Post(':id/clues/:clueId/wager')
   async submitClueWager(
@@ -413,6 +434,10 @@ export class GameController {
   /**
    * POST /games/:id/final-jeopardy/wager
    * Submit a wager for Final Jeopardy
+   *
+   * GAME LIFECYCLE NOTE (Phase 4 – Final Jeopardy):
+   * Responsible for: FINAL_PENDING → FINAL_ACTIVE. Wager stored; game ready for answer.
+   * NOT responsible for: Score update or COMPLETED. That is answerFinalJeopardy().
    */
   @Post(':id/final-jeopardy/wager')
   async submitFinalJeopardyWager(
@@ -458,6 +483,10 @@ export class GameController {
   /**
    * POST /games/:id/final-jeopardy/answer
    * Submit the answer (correct/incorrect) for Final Jeopardy
+   *
+   * GAME LIFECYCLE NOTE (Phase 4 – Final Jeopardy):
+   * Responsible for: Final score update, FINAL_ACTIVE → COMPLETED, user stats.
+   * NOT responsible for: Wager (already submitted in FINAL_PENDING). Backend authoritative.
    */
   @Post(':id/final-jeopardy/answer')
   async answerFinalJeopardy(

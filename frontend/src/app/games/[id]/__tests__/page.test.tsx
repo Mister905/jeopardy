@@ -6,9 +6,15 @@ import { renderWithProviders } from '@/test-utils/test-utils';
 import { createMockGame } from '@/test-utils/mocks/gameMocks';
 import { createMockBoardResponse, createMockJeopardyBoard } from '@/test-utils/mocks/boardMocks';
 import * as gamesApi from '@/lib/api/games';
-import { fetchGameData, startGame, startPolling, stopPolling } from '@/store/gameSlice';
+import { fetchGameData, startGame } from '@/store/gameSlice';
 
-jest.mock('next/navigation');
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(() => ({ push: mockPush, replace: jest.fn(), prefetch: jest.fn(), back: jest.fn() })),
+  useParams: jest.fn(() => ({})),
+  usePathname: jest.fn(() => '/'),
+  useSearchParams: jest.fn(() => new URLSearchParams()),
+}));
 jest.mock('@/lib/api/games');
 jest.mock('@/lib/auth/hooks', () => ({
   useRequireAuth: jest.fn(() => ({
@@ -18,13 +24,12 @@ jest.mock('@/lib/auth/hooks', () => ({
 }));
 
 describe('GameDetailPage component', () => {
-  const mockPush = jest.fn();
   const mockParams = { id: 'game-1' };
 
   beforeEach(() => {
     jest.clearAllMocks();
     (useParams as jest.Mock).mockReturnValue(mockParams);
-    (useRouter as jest.Mock).mockReturnValue({ push: mockPush });
+    (useRouter as jest.Mock).mockReturnValue({ push: mockPush, replace: jest.fn(), prefetch: jest.fn(), back: jest.fn() });
   });
 
   it('should mount and initialize game data', async () => {
@@ -39,51 +44,6 @@ describe('GameDetailPage component', () => {
     await waitFor(() => {
       expect(gamesApi.getGame).toHaveBeenCalledWith('game-1');
     });
-  });
-
-  it('should start polling for ACTIVE games', async () => {
-    jest.useFakeTimers();
-    const mockGame = createMockGame('ACTIVE');
-    const mockBoard = createMockBoardResponse('game-1', 'ACTIVE', 'JEOPARDY');
-
-    (gamesApi.getGame as jest.Mock).mockResolvedValue(mockGame);
-    (gamesApi.getBoard as jest.Mock).mockResolvedValue(mockBoard);
-
-    const { store } = renderWithProviders(<GameDetailPage />);
-
-    await waitFor(() => {
-      expect(store.getState().game.game).toEqual(mockGame);
-    });
-
-    // Polling should start for ACTIVE games
-    await waitFor(() => {
-      expect(store.getState().game.isPolling).toBe(true);
-    });
-
-    jest.useRealTimers();
-  });
-
-  it('should stop polling on component unmount', async () => {
-    jest.useFakeTimers();
-    const mockGame = createMockGame('ACTIVE');
-    const mockBoard = createMockBoardResponse('game-1', 'ACTIVE', 'JEOPARDY');
-
-    (gamesApi.getGame as jest.Mock).mockResolvedValue(mockGame);
-    (gamesApi.getBoard as jest.Mock).mockResolvedValue(mockBoard);
-
-    const { store, unmount } = renderWithProviders(<GameDetailPage />);
-
-    await waitFor(() => {
-      expect(store.getState().game.isPolling).toBe(true);
-    });
-
-    unmount();
-
-    await waitFor(() => {
-      expect(store.getState().game.isPolling).toBe(false);
-    });
-
-    jest.useRealTimers();
   });
 
   it('should handle error and recovery', async () => {
@@ -174,31 +134,4 @@ describe('GameDetailPage component', () => {
     // This depends on LoadingSpinner implementation
   });
 
-  it('should stop polling when game reaches terminal state', async () => {
-    jest.useFakeTimers();
-    const mockGame = createMockGame('ACTIVE');
-    const completedGame = createMockGame('COMPLETED');
-    const mockBoard = createMockBoardResponse('game-1', 'ACTIVE', 'JEOPARDY');
-
-    (gamesApi.getGame as jest.Mock)
-      .mockResolvedValueOnce(mockGame)
-      .mockResolvedValueOnce(completedGame);
-    (gamesApi.getBoard as jest.Mock).mockResolvedValue(mockBoard);
-
-    const { store } = renderWithProviders(<GameDetailPage />);
-
-    await waitFor(() => {
-      expect(store.getState().game.isPolling).toBe(true);
-    });
-
-    // Simulate state change to COMPLETED
-    (gamesApi.getGame as jest.Mock).mockResolvedValue(completedGame);
-    await store.dispatch(fetchGameData('game-1'));
-
-    await waitFor(() => {
-      expect(store.getState().game.isPolling).toBe(false);
-    });
-
-    jest.useRealTimers();
-  });
 });

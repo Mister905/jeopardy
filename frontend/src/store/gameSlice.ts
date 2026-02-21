@@ -34,8 +34,6 @@ interface GameState {
   selectedClue: SelectedClue | null;
   actionLoading: boolean;
   error: string | null;
-  isPolling: boolean;
-  pollingIntervalId: NodeJS.Timeout | null;
   previousGameState: string | null;
 }
 
@@ -46,10 +44,33 @@ const initialState: GameState = {
   selectedClue: null,
   actionLoading: false,
   error: null,
-  isPolling: false,
-  pollingIntervalId: null,
   previousGameState: null,
 };
+
+/** Extract error payload from ApiClientError or plain error-like object (avoids Jest worker issues with Error instances). */
+function getErrorPayload(
+  err: unknown,
+  fallback: string,
+): { error: string; statusCode?: number } {
+  if (err instanceof ApiClientError) {
+    return { error: err.message, statusCode: err.statusCode };
+  }
+  // Plain objects with statusCode (e.g. from API) - use their message
+  if (
+    err &&
+    typeof err === 'object' &&
+    'statusCode' in err &&
+    typeof (err as { statusCode: unknown }).statusCode === 'number' &&
+    'message' in err &&
+    typeof (err as { message: unknown }).message === 'string'
+  ) {
+    return {
+      error: (err as { message: string }).message,
+      statusCode: (err as { statusCode: number }).statusCode,
+    };
+  }
+  return { error: fallback, statusCode: 500 };
+}
 
 // Thunk to fetch game and board data
 export const fetchGameData = createAsyncThunk(
@@ -62,16 +83,8 @@ export const fetchGameData = createAsyncThunk(
       ]);
       return { game: gameData, board: boardData };
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to load game. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to load game. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -85,16 +98,8 @@ export const startGame = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       return;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to start game. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to start game. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -187,16 +192,8 @@ export const answerClue = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       return response;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to submit answer. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to submit answer. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -213,16 +210,8 @@ export const passClue = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       return response;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to pass clue. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to pass clue. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -274,16 +263,8 @@ export const submitClueWager = createAsyncThunk(
       
       return;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to submit wager. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to submit wager. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -300,16 +281,8 @@ export const submitFinalJeopardyWager = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       return;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to submit wager. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to submit wager. Please try again.');
+      return rejectWithValue(payload);
     }
   },
 );
@@ -326,92 +299,9 @@ export const answerFinalJeopardy = createAsyncThunk(
       await dispatch(fetchGameData(gameId));
       return;
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        return rejectWithValue({
-          error: err.message,
-          statusCode: err.statusCode,
-        });
-      }
-      return rejectWithValue({
-        error: 'Failed to submit answer. Please try again.',
-        statusCode: 500,
-      });
+      const payload = getErrorPayload(err, 'Failed to submit answer. Please try again.');
+      return rejectWithValue(payload);
     }
-  },
-);
-
-// Helper function to check if polling should be active
-const shouldPoll = (gameState: string | null): boolean => {
-  if (!gameState) return false;
-  return (
-    gameState === 'ACTIVE' ||
-    gameState === 'FINAL_PENDING' ||
-    gameState === 'FINAL_ACTIVE'
-  );
-};
-
-// Thunk to start polling
-export const startPolling = createAsyncThunk(
-  'game/startPolling',
-  async (gameId: string, { dispatch, getState }) => {
-    const state = getState() as { game: GameState };
-    const { game, isPolling, pollingIntervalId } = state.game;
-
-    // Don't start if already polling
-    if (isPolling && pollingIntervalId) {
-      return;
-    }
-
-    // Don't start if game state doesn't require polling
-    if (!shouldPoll(game?.state || null)) {
-      return;
-    }
-
-    // Clear any existing interval
-    if (pollingIntervalId) {
-      clearInterval(pollingIntervalId);
-    }
-
-    // Set up polling interval
-    const intervalId = setInterval(() => {
-      const currentState = getState() as { game: GameState };
-      const { game: currentGame, actionLoading, pollingIntervalId: currentIntervalId } = currentState.game;
-
-      // Check if polling was stopped (interval ID cleared) - prevents race condition
-      if (!currentIntervalId || currentIntervalId !== intervalId) {
-        return;
-      }
-
-      // Don't poll if action is in progress
-      if (actionLoading) {
-        return;
-      }
-
-      // Don't poll if game state no longer requires it
-      if (!shouldPoll(currentGame?.state || null)) {
-        dispatch(stopPolling());
-        return;
-      }
-
-      dispatch(fetchGameData(gameId));
-    }, 3000); // Poll every 3 seconds
-
-    return intervalId;
-  },
-);
-
-// Action to stop polling
-export const stopPolling = createAsyncThunk(
-  'game/stopPolling',
-  async (_, { getState }) => {
-    const state = getState() as { game: GameState };
-    const { pollingIntervalId } = state.game;
-
-    if (pollingIntervalId) {
-      clearInterval(pollingIntervalId);
-    }
-
-    return null;
   },
 );
 
@@ -441,13 +331,7 @@ const gameSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
-    resetGameState: (state) => {
-      // Clear polling if active
-      if (state.pollingIntervalId) {
-        clearInterval(state.pollingIntervalId);
-      }
-      return initialState;
-    },
+    resetGameState: () => initialState,
   },
   extraReducers: (builder) => {
     // fetchGameData
@@ -483,19 +367,6 @@ const gameSlice = createSlice({
         // Do not clear selectedClue here when clue becomes RESOLVED: after Pass we keep
         // the dialog open so the user can review the answer and click Continue; clearing
         // is done in answerClue.fulfilled (after answer) or by the user clicking Continue.
-
-        // Update polling based on new state
-        const shouldStartPolling = shouldPoll(currentState);
-        if (shouldStartPolling && !state.isPolling) {
-          // Polling will be started by component
-        } else if (!shouldStartPolling && state.isPolling) {
-          // Stop polling if game reached terminal state
-          if (state.pollingIntervalId) {
-            clearInterval(state.pollingIntervalId);
-            state.pollingIntervalId = null;
-          }
-          state.isPolling = false;
-        }
       })
       .addCase(fetchGameData.rejected, (state, action) => {
         const payload = action.payload as { error?: string; statusCode?: number };
@@ -646,22 +517,6 @@ const gameSlice = createSlice({
         if (payload?.error) {
           state.error = payload.error;
         }
-      });
-
-    // startPolling
-    builder
-      .addCase(startPolling.fulfilled, (state, action) => {
-        if (action.payload) {
-          state.pollingIntervalId = action.payload;
-          state.isPolling = true;
-        }
-      });
-
-    // stopPolling
-    builder
-      .addCase(stopPolling.fulfilled, (state) => {
-        state.pollingIntervalId = null;
-        state.isPolling = false;
       });
   },
 });

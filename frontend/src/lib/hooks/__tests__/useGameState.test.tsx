@@ -25,8 +25,6 @@ describe('useGameState hook', () => {
         selectedClue: null,
         actionLoading: false,
         error: null,
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: 'ACTIVE',
       },
     });
@@ -39,7 +37,6 @@ describe('useGameState hook', () => {
     expect(result.current.board).toEqual(mockBoard);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(result.current.isPolling).toBe(false);
   });
 
   it('should return loading state when game is null and no error', () => {
@@ -51,8 +48,6 @@ describe('useGameState hook', () => {
         selectedClue: null,
         actionLoading: false,
         error: null,
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: null,
       },
     });
@@ -73,8 +68,6 @@ describe('useGameState hook', () => {
         selectedClue: null,
         actionLoading: false,
         error: 'Test error',
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: null,
       },
     });
@@ -99,8 +92,6 @@ describe('useGameState hook', () => {
         selectedClue: null,
         actionLoading: false,
         error: null,
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: 'ACTIVE',
       },
     });
@@ -128,8 +119,6 @@ describe('useGameState hook', () => {
         selectedClue: null,
         actionLoading: false,
         error: null,
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: null,
       },
     });
@@ -141,27 +130,5 @@ describe('useGameState hook', () => {
     await result.current.refresh();
 
     expect(gamesApi.getGame).not.toHaveBeenCalled();
-  });
-
-  it('should return isPolling state', () => {
-    const store = createMockStore({
-      game: {
-        gameId: 'game-1',
-        game: createMockGame('ACTIVE'),
-        board: createMockBoardResponse(),
-        selectedClue: null,
-        actionLoading: false,
-        error: null,
-        isPolling: true,
-        pollingIntervalId: setInterval(() => {}, 1000) as any,
-        previousGameState: 'ACTIVE',
-      },
-    });
-
-    const { result } = renderHook(() => useGameState(), {
-      wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
-    });
-
-    expect(result.current.isPolling).toBe(true);
   });
 });

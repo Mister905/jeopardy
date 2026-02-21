@@ -18,8 +18,6 @@ describe('gameSlice reducers', () => {
     selectedClue: null,
     actionLoading: false,
     error: null,
-    isPolling: false,
-    pollingIntervalId: null,
     previousGameState: null,
   };
 
@@ -139,8 +137,6 @@ describe('gameSlice reducers', () => {
         selectedClue: createMockSelectedClue(),
         actionLoading: true,
         error: 'Error',
-        isPolling: true,
-        pollingIntervalId: 123 as any,
         previousGameState: 'ACTIVE',
       };
 
@@ -148,22 +144,6 @@ describe('gameSlice reducers', () => {
       const state = gameReducer(stateWithData, action);
 
       expect(state).toEqual(initialState);
-    });
-
-    it('should clear polling interval if exists', () => {
-      const mockIntervalId = setInterval(() => {}, 1000);
-      const stateWithPolling: GameState = {
-        ...initialState,
-        pollingIntervalId: mockIntervalId as any,
-        isPolling: true,
-      };
-
-      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
-      const action = resetGameState();
-      gameReducer(stateWithPolling, action);
-
-      expect(clearIntervalSpy).toHaveBeenCalledWith(mockIntervalId);
-      clearIntervalSpy.mockRestore();
     });
   });
 });

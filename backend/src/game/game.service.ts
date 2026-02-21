@@ -25,6 +25,12 @@ export class GameService {
 
   /**
    * Create a new game with a Final Jeopardy clue
+   *
+   * GAME LIFECYCLE NOTE (Phase 1 – PENDING):
+   * Responsible for: Game + FinalJeopardy only. State = PENDING. No board.
+   * NOT responsible for: Board generation (60 clues, Daily Doubles). That is startGame().
+   * Why: Board build is expensive; create stays fast for immediate redirect.
+   *
    * @param userId - The authenticated user creating the game
    * @param email - The user's email address (optional, will be fetched from existing user if missing)
    * @param username - Optional username (required for new users)
@@ -301,6 +307,12 @@ export class GameService {
 
   /**
    * Start a game by creating Jeopardy and Double Jeopardy boards
+   *
+   * GAME LIFECYCLE NOTE (Phase 2 – ACTIVE):
+   * Responsible for: 60 GameClues, Daily Double assignment, PENDING → ACTIVE.
+   * NOT responsible for: Creating Game or FinalJeopardy. That is createGame().
+   * Why separate: Heavy logic; user may abandon. Create is lightweight.
+   *
    * Retries category selection until all required clues are found
    * @param gameId - Game ID
    * @param userId - User ID for authorization
@@ -882,6 +894,12 @@ export class GameService {
 
   /**
    * Answer a clue (regular or Daily Double)
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Responsible for: Score mutation, GameClue RESOLVED, optional ACTIVE → FINAL_PENDING/ELIMINATED.
+   * NOT responsible for: Clue selection (frontend-only). Backend is authoritative for score.
+   * Why transaction: GameClue + Game.score must update atomically. Round completion checked here.
+   *
    * @param gameId - Game ID
    * @param clueId - GameClue ID
    * @param userId - User ID for authorization
@@ -1036,6 +1054,10 @@ export class GameService {
 
   /**
    * Pass on a regular (non–Daily Double) clue: resolve with no score change.
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Same as answerClue for state/round completion but scoreDelta = 0. No user stats update.
+   *
    * Not allowed for Daily Doubles or already-resolved clues.
    * @param gameId - Game ID
    * @param clueId - GameClue ID
@@ -1133,6 +1155,10 @@ export class GameService {
 
   /**
    * Submit a wager for a Daily Double clue
+   *
+   * GAME LIFECYCLE NOTE (Phase 3 – Gameplay):
+   * Daily Double only. GameClue UNANSWERED → ANSWERED. Enables answerClue for that clue.
+   *
    * @param gameId - Game ID
    * @param clueId - GameClue ID
    * @param userId - User ID for authorization
@@ -1206,6 +1232,11 @@ export class GameService {
 
   /**
    * Submit a wager for Final Jeopardy
+   *
+   * GAME LIFECYCLE NOTE (Phase 4 – Final Jeopardy):
+   * Responsible for: FINAL_PENDING → FINAL_ACTIVE. Wager stored; game ready for answer.
+   * NOT responsible for: Score or COMPLETED. That is answerFinalJeopardy().
+   *
    * @param gameId - Game ID
    * @param userId - User ID for authorization
    * @param wager - Wager amount
@@ -1255,6 +1286,11 @@ export class GameService {
 
   /**
    * Submit the answer for Final Jeopardy
+   *
+   * GAME LIFECYCLE NOTE (Phase 4 – Final Jeopardy):
+   * Responsible for: Final score, FINAL_ACTIVE → COMPLETED, user stats (FJ wager, game complete).
+   * NOT responsible for: Wager (submitted in FINAL_PENDING). Backend authoritative.
+   *
    * @param gameId - Game ID
    * @param userId - User ID for authorization
    * @param correct - Whether the answer was correct

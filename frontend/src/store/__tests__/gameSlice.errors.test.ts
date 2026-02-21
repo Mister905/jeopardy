@@ -9,7 +9,6 @@ import gameReducer, {
   type GameState,
 } from '../gameSlice';
 import * as gamesApi from '@/lib/api/games';
-import { ApiClientError } from '@/lib/api/client';
 import { createMockGame } from '@/test-utils/mocks/gameMocks';
 import { createMockBoardResponse } from '@/test-utils/mocks/boardMocks';
 
@@ -27,12 +26,12 @@ describe('gameSlice error handling', () => {
 
   describe('ApiClientError handling', () => {
     it('should handle 400 validation errors', async () => {
-      const error = new ApiClientError(400, 'Invalid wager amount', 'Bad Request');
+      const error = { statusCode: 400, message: 'Invalid wager amount', error: 'Bad Request' };
       (gamesApi.submitClueWager as jest.Mock).mockRejectedValue(error);
 
-      const result = await store.dispatch(
-        submitClueWager({ gameId: 'game-1', clueId: 'clue-1', wager: -100 }),
-      );
+      const result = await store
+        .dispatch(submitClueWager({ gameId: 'game-1', clueId: 'clue-1', wager: -100 }))
+        .catch((e) => e);
 
       expect(result.type).toBe('game/submitClueWager/rejected');
       expect(store.getState().game.error).toBe('Invalid wager amount');
@@ -40,10 +39,11 @@ describe('gameSlice error handling', () => {
     });
 
     it('should handle 401 unauthorized errors', async () => {
-      const error = new ApiClientError(401, 'Unauthorized access', 'Unauthorized');
+      const error = { statusCode: 401, message: 'Unauthorized access', error: 'Unauthorized' };
       (gamesApi.getGame as jest.Mock).mockRejectedValue(error);
+      (gamesApi.getBoard as jest.Mock).mockResolvedValue(null);
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBe('Unauthorized access');
@@ -51,10 +51,10 @@ describe('gameSlice error handling', () => {
     });
 
     it('should handle 403 forbidden errors', async () => {
-      const error = new ApiClientError(403, 'Access denied', 'Forbidden');
+      const error = { statusCode: 403, message: 'Access denied', error: 'Forbidden' };
       (gamesApi.getGame as jest.Mock).mockRejectedValue(error);
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBe('Access denied');
@@ -62,20 +62,20 @@ describe('gameSlice error handling', () => {
     });
 
     it('should handle 404 not found errors', async () => {
-      const error = new ApiClientError(404, 'Game not found', 'Not Found');
+      const error = { statusCode: 404, message: 'Game not found', error: 'Not Found' };
       (gamesApi.getGame as jest.Mock).mockRejectedValue(error);
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBe('Game not found');
     });
 
     it('should handle 500 server errors', async () => {
-      const error = new ApiClientError(500, 'Internal server error', 'Internal Server Error');
+      const error = { statusCode: 500, message: 'Internal server error', error: 'Internal Server Error' };
       (gamesApi.getGame as jest.Mock).mockRejectedValue(error);
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBe('Internal server error');
@@ -86,7 +86,7 @@ describe('gameSlice error handling', () => {
     it('should handle network failures during fetchGameData', async () => {
       (gamesApi.getGame as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBe('Failed to load game. Please try again.');
@@ -95,9 +95,9 @@ describe('gameSlice error handling', () => {
     it('should handle network failures during action thunks', async () => {
       (gamesApi.answerClue as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-      const result = await store.dispatch(
-        answerClue({ gameId: 'game-1', clueId: 'clue-1', correct: true }),
-      );
+      const result = await store
+        .dispatch(answerClue({ gameId: 'game-1', clueId: 'clue-1', correct: true }))
+        .catch((e) => e);
 
       expect(result.type).toBe('game/answerClue/rejected');
       expect(store.getState().game.error).toBe('Failed to submit answer. Please try again.');
@@ -109,7 +109,7 @@ describe('gameSlice error handling', () => {
         () => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100)),
       );
 
-      const result = await store.dispatch(fetchGameData('game-1'));
+      const result = await store.dispatch(fetchGameData('game-1')).catch((e) => e);
 
       expect(result.type).toBe('game/fetchGameData/rejected');
       expect(store.getState().game.error).toBeTruthy();
@@ -125,8 +125,6 @@ describe('gameSlice error handling', () => {
         selectedClue: null,
         actionLoading: false,
         error: 'Previous error',
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: null,
       };
 
@@ -153,8 +151,6 @@ describe('gameSlice error handling', () => {
         selectedClue: null,
         actionLoading: false,
         error: 'Previous error',
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: 'ACTIVE',
       };
 
@@ -195,8 +191,6 @@ describe('gameSlice error handling', () => {
         },
         actionLoading: false,
         error: 'Previous error',
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: 'ACTIVE',
       };
 
@@ -229,8 +223,6 @@ describe('gameSlice error handling', () => {
         selectedClue: null,
         actionLoading: false,
         error: 'Previous error',
-        isPolling: false,
-        pollingIntervalId: null,
         previousGameState: 'ACTIVE',
       };
 
@@ -254,32 +246,36 @@ describe('gameSlice error handling', () => {
 
   describe('UI state recovery', () => {
     it('should clear actionLoading on error', async () => {
-      const error = new ApiClientError(400, 'Invalid request', 'Bad Request');
+      const error = { statusCode: 400, message: 'Invalid request', error: 'Bad Request' };
       (gamesApi.startGame as jest.Mock).mockRejectedValue(error);
 
-      store.dispatch(startGame('game-1'));
+      const promise = store.dispatch(startGame('game-1'));
       expect(store.getState().game.actionLoading).toBe(true);
 
-      await Promise.resolve(); // Wait for rejection
+      await promise.catch(() => {}); // Wait for rejection
 
       expect(store.getState().game.actionLoading).toBe(false);
     });
 
     it('should not get stuck in loading state', async () => {
-      const error = new ApiClientError(500, 'Server error', 'Internal Server Error');
+      const error = { statusCode: 500, message: 'Server error', error: 'Internal Server Error' };
       (gamesApi.answerClue as jest.Mock).mockRejectedValue(error);
 
-      await store.dispatch(answerClue({ gameId: 'game-1', clueId: 'clue-1', correct: true }));
+      await store
+        .dispatch(answerClue({ gameId: 'game-1', clueId: 'clue-1', correct: true }))
+        .catch(() => {});
 
       expect(store.getState().game.actionLoading).toBe(false);
       expect(store.getState().game.error).toBeTruthy();
     });
 
     it('should provide user-friendly error messages', async () => {
-      const error = new ApiClientError(400, 'Validation failed', 'Bad Request');
+      const error = { statusCode: 400, message: 'Validation failed', error: 'Bad Request' };
       (gamesApi.submitClueWager as jest.Mock).mockRejectedValue(error);
 
-      await store.dispatch(submitClueWager({ gameId: 'game-1', clueId: 'clue-1', wager: 500 }));
+      await store
+        .dispatch(submitClueWager({ gameId: 'game-1', clueId: 'clue-1', wager: 500 }))
+        .catch(() => {});
 
       const errorMessage = store.getState().game.error;
       expect(errorMessage).toBe('Validation failed');

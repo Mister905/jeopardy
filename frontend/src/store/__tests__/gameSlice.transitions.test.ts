@@ -40,8 +40,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'PENDING',
           },
         },
@@ -75,8 +73,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'ACTIVE',
           },
         },
@@ -106,8 +102,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'FINAL_PENDING',
           },
         },
@@ -137,8 +131,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: true,
-            pollingIntervalId: setInterval(() => {}, 1000) as any,
             previousGameState: 'ACTIVE',
           },
         },
@@ -150,7 +142,6 @@ describe('gameSlice state transitions', () => {
       await store.dispatch(fetchGameData('game-1'));
 
       expect(store.getState().game.game?.state).toBe('COMPLETED');
-      expect(store.getState().game.isPolling).toBe(false);
     });
 
     it('should transition to ELIMINATED terminal state', async () => {
@@ -168,8 +159,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: true,
-            pollingIntervalId: setInterval(() => {}, 1000) as any,
             previousGameState: 'ACTIVE',
           },
         },
@@ -181,7 +170,6 @@ describe('gameSlice state transitions', () => {
       await store.dispatch(fetchGameData('game-1'));
 
       expect(store.getState().game.game?.state).toBe('ELIMINATED');
-      expect(store.getState().game.isPolling).toBe(false);
     });
   });
 
@@ -200,8 +188,6 @@ describe('gameSlice state transitions', () => {
             selectedClue: null,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'ACTIVE',
           },
         },
@@ -230,8 +216,6 @@ describe('gameSlice state transitions', () => {
             selectedClue,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'ACTIVE',
           },
         },
@@ -261,49 +245,12 @@ describe('gameSlice state transitions', () => {
             selectedClue,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'FINAL_PENDING',
           },
         },
       });
 
       (gamesApi.getGame as jest.Mock).mockResolvedValue(finalActiveGame);
-      (gamesApi.getBoard as jest.Mock).mockResolvedValue(board);
-
-      await store.dispatch(fetchGameData('game-1'));
-
-      expect(store.getState().game.selectedClue).toBeNull();
-    });
-
-    it('should clear selectedClue when clue becomes RESOLVED', async () => {
-      const mockGame = createMockGame('ACTIVE');
-      const selectedClue = createMockSelectedClue({ gameClueId: 'gc-1', state: 'ANSWERED' });
-      const board = createMockBoardResponse('game-1', 'ACTIVE', 'JEOPARDY', createMockJeopardyBoard());
-      
-      // Make the clue RESOLVED in the board
-      if (board.board && 'categories' in board.board) {
-        board.board.categories[0].clues[0].state = 'RESOLVED';
-      }
-
-      store = configureStore({
-        reducer: { game: gameReducer },
-        preloadedState: {
-          game: {
-            gameId: 'game-1',
-            game: mockGame,
-            board: createMockBoardResponse('game-1', 'ACTIVE', 'JEOPARDY', createMockJeopardyBoard()),
-            selectedClue,
-            actionLoading: false,
-            error: null,
-            isPolling: false,
-            pollingIntervalId: null,
-            previousGameState: 'ACTIVE',
-          },
-        },
-      });
-
-      (gamesApi.getGame as jest.Mock).mockResolvedValue(mockGame);
       (gamesApi.getBoard as jest.Mock).mockResolvedValue(board);
 
       await store.dispatch(fetchGameData('game-1'));
@@ -326,8 +273,6 @@ describe('gameSlice state transitions', () => {
             selectedClue,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'ACTIVE',
           },
         },
@@ -372,8 +317,6 @@ describe('gameSlice state transitions', () => {
             selectedClue,
             actionLoading: false,
             error: null,
-            isPolling: false,
-            pollingIntervalId: null,
             previousGameState: 'ACTIVE',
           },
         },

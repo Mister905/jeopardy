@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchGameData, startPolling, stopPolling } from '@/store/gameSlice';
+import { fetchGameData } from '@/store/gameSlice';
 
 /**
  * Optional convenience hook that wraps Redux selectors and dispatch.
@@ -12,8 +12,6 @@ import { fetchGameData, startPolling, stopPolling } from '@/store/gameSlice';
 export function useGameState(options?: {
   gameId?: string;
   enabled?: boolean;
-  pollInterval?: number;
-  pausePolling?: boolean;
   onStateChange?: (game: any) => void;
 }) {
   const dispatch = useAppDispatch();
@@ -23,7 +21,6 @@ export function useGameState(options?: {
   const board = useAppSelector((state) => state.game.board);
   const loading = useAppSelector((state) => !state.game.game && !state.game.error);
   const error = useAppSelector((state) => state.game.error);
-  const isPolling = useAppSelector((state) => state.game.isPolling);
 
   // Manual refresh function
   const refresh = useCallback(() => {
@@ -38,6 +35,5 @@ export function useGameState(options?: {
     loading,
     error,
     refresh,
-    isPolling,
   };
 }
